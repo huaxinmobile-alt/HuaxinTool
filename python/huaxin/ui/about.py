@@ -356,7 +356,8 @@ class AboutDialog(QDialog):
 
         licence = QLabel(
             "Huaxin Tool is released under the MIT licence. See LICENSE beside the "
-            "application.",
+            "application; the components above and the product names are covered by "
+            "THIRD_PARTY_NOTICES.md.",
             box,
         )
         licence.setWordWrap(True)

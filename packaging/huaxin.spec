@@ -113,7 +113,7 @@ samples = REPO_ROOT / "examples"
 if samples.is_dir():
     datas.append((str(samples), "examples"))
 
-for misc in ("README.md", "LICENSE"):
+for misc in ("README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
     candidate = REPO_ROOT / misc
     if candidate.is_file():
         datas.append((str(candidate), "."))

@@ -25,7 +25,8 @@ wrong PIT — are not recoverable by reflashing the same package.
 - **Never unplug during a write.** Wait until the operation reports that it
   finished, or failed, and read what it says. A cancelled or interrupted write
   leaves the partition in an unknown state.
-- **This tool is provided as-is, with no warranty.** See `LICENSE`. You are
+- **This tool is provided as-is, with no warranty.** See `LICENSE`; the third-party
+  components and product names are in `THIRD_PARTY_NOTICES.md`. You are
   responsible for the device you connect to it.
 - **Verify against your own hardware before relying on it.** See
   [Status](#status) for exactly what has and has not been confirmed. No vendor
@@ -90,7 +91,8 @@ HUAXIN TOOL/
 ├── CMakeLists.txt              Root build: toolchain, dependencies, target tree
 ├── requirements.txt            Python dependencies (pybind11, PyQt6)
 ├── README.md                   This file
-├── LICENSE                     MIT, plus the third-party and trademark notes
+├── LICENSE                     MIT
+├── THIRD_PARTY_NOTICES.md      What the components and product names are
 ├── cmake/Libusb.cmake          libusb resolution (package > pkg-config > source)
 ├── src/cpp/                    Native backend  ->  builds `huaxin_core`
 │   ├── CMakeLists.txt          Extension module target, staging, native test targets
