@@ -1,0 +1,34 @@
+# Line endings, stated rather than left to each machine's git config.
+#
+# This project is developed on Windows and built on Linux, and the two disagree
+# about what a text file looks like. Without this, a checkout on Windows rewrites
+# every file's endings, and the next commit is 196 files of noise that hides the
+# one line somebody actually changed.
+#
+# Sources are stored with LF and checked out with LF everywhere. Git for Windows
+# copes with LF in C++ and Python without complaint, and a build that produces
+# different bytes depending on who ran it is worse than a slightly unusual
+# checkout.
+
+* text=auto eol=lf
+
+# Windows-only files that genuinely want CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary: never touched, never diffed as text. The screenshots are documentation,
+# so they are committed - as binaries.
+*.png binary
+*.ico binary
+*.pyd binary
+*.so binary
+*.dylib binary
+*.lib binary
+*.exe binary
+*.pdf binary
+*.zip binary
+
+# Generated files that are committed but not hand-edited. Collapsed in diffs so
+# they do not drown the file that did change.
+*.lock linguist-generated
