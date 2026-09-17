@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Deployment template for Huaxin Tool settings.",
+    "",
+    "Copy this file next to the executable and rename it to",
+    "settings.template.json. On first run, any machine with no settings file of",
+    "its own starts from this one - which is how an organisation ships the same",
+    "timeouts, log level and policy to every workstation.",
+    "",
+    "A user's own settings, once saved, always win. This file is a starting",
+    "point, never an override.",
+    "",
+    "Every key here is optional. Omit what you do not want to set, and remove",
+    "this _comment block if you prefer - the loader ignores keys it does not",
+    "recognise."
+  ],
+  "_comment_logging": [
+    "log_level: debug, info, warning, error, critical.",
+    "log_file: leave empty to write flash_log.txt beside the executable.",
+    "log_max_bytes: the log rotates to a single .1 backup past this size.",
+    "save_logs_automatically keeps one copy per session under sessions/."
+  ],
+  "log_level": "info",
+  "log_file": "",
+  "log_max_bytes": 10485760,
+  "log_to_console": true,
+  "log_to_file": true,
+  "auto_scroll_log": true,
+  "save_logs_automatically": true,
+  "_comment_timeouts": [
+    "Seconds. The transfer timeout is separate from the command timeout because",
+    "a multi-gigabyte image over a marginal hub legitimately takes minutes."
+  ],
+  "default_timeout": 30.0,
+  "transfer_timeout": 180.0,
+  "connect_timeout": 10.0,
+  "_comment_retries": [
+    "attempts includes the first, so 1 disables retrying. Delays are in",
+    "milliseconds and double each attempt up to retry_max_delay_ms.",
+    "Only failures that could plausibly succeed on a second try are repeated: a",
+    "failed write and a locked bootloader never are."
+  ],
+  "max_retry_attempts": 3,
+  "retry_initial_delay_ms": 250,
+  "retry_max_delay_ms": 5000,
+  "retry_total_budget_s": 60,
+  "_comment_behaviour": [
+    "confirm_destructive_operations is the one setting worth thinking hard about",
+    "before turning off in a deployment: it is the only thing standing between a",
+    "mis-click and a wiped device.",
+    "speed_limit is bytes per second; 0 means no cap. It exists for marginal links",
+    "that enumerate fine and then fail under sustained load.",
+    "theme: midnight, graphite or daylight. Daylight exists for a bench with a",
+    "window behind it, where a dark interface is genuinely hard to read."
+  ],
+  "confirm_destructive_operations": true,
+  "scan_on_startup": true,
+  "read_usb_strings": true,
+  "show_root_hubs": false,
+  "speed_limit": 0,
+  "theme": "midnight",
+  "adb_path": "",
+  "fastboot_path": "",
+  "animations": true
+}

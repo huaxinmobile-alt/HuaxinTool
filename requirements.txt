@@ -1,0 +1,8 @@
+# Native bridge build dependency (Phase 1).
+# Provides the C++ headers and the CMake package used by CMakeLists.txt.
+# Must be >= 3.0 for Python 3.14 support.
+pybind11>=3.1.0
+
+# Desktop UI (Phase 2). The abi3 wheel means one build covers every Python
+# version from 3.10 up.
+PyQt6>=6.7

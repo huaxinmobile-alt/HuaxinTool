@@ -1,0 +1,39 @@
+# Build output
+build/
+dist/
+*.spec.bak
+flash_log.txt
+cmake-build-*/
+CMakeUserPresets.json
+compile_commands.json
+
+# Compiled extension module staged into the Python source tree by CMake
+python/huaxin_core*.pyd
+python/huaxin_core*.so
+python/huaxin_core*.dylib
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+
+# Editors / OS
+.vscode/
+.idea/
+*.user
+Thumbs.db
+desktop.ini
+
+# Out-of-source build tree and Visual Studio state
+out/
+.vs/
+
+# Per-session log copies, written beside the live log during a run
+sessions/
+startup_check.log
+*.log
+
+# Build inputs fetched by CMake; they are downloaded, not vendored
+third_party/*/

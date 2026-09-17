@@ -1,0 +1,1268 @@
+/* ============================================================================
+ *  Huaxin Tool - application stylesheet
+ *
+ *  This file is a TEMPLATE. Every `@token` in it is replaced at load time by a
+ *  value from huaxin/ui/tokens.py, so no colour is written down twice and
+ *  switching theme is a substitution rather than a second stylesheet. A test
+ *  asserts that nothing matching `@[a-z_]+` survives into the rendered sheet,
+ *  which turns a mistyped token name into a failure instead of a rule Qt
+ *  quietly ignores.
+ *
+ *  Qt's stylesheet dialect is close to CSS but not the same. The differences
+ *  that bit while writing this:
+ *
+ *    * There is no box-shadow. Elevation is a QGraphicsDropShadowEffect applied
+ *      in code (see components.py), because nothing in QSS can express it.
+ *    * box-sizing is always border-box, and width/height on a widget are
+ *      advisory - padding and border add to them regardless.
+ *    * `image:` needs a file path, not an inline SVG, which is why the combo
+ *      arrow and the checkbox tick are written to a cache directory by icons.py
+ *      and referenced here through @token paths.
+ *    * Selectors cannot be nested, and a rule that fails to parse is dropped
+ *      silently - so the sheet is kept flat and every rule is simple.
+ *    * Sub-controls (:hover, :pressed) do not apply to a widget whose parent
+ *      rule has a more specific selector; specificity matters as in CSS.
+ *
+ *  Structure:
+ *    1. base and typography      8. tables
+ *    2. window frame (frameless) 9. progress
+ *    3. menus and toolbar       10. scrollbars
+ *    4. tabs                    11. docks and splitters
+ *    5. buttons                 12. console
+ *    6. inputs                  13. status bar, chips, dots
+ *    7. cards and surfaces      14. dialogs
+ * ========================================================================= */
+
+/* ---- 1. base and typography --------------------------------------------- */
+
+QWidget {
+    background-color: @bg;
+    color: @text;
+    font-family: @font_family;
+    font-size: @font_size_body;
+}
+
+QWidget:disabled {
+    color: @text_disabled;
+}
+
+QMainWindow, QDialog {
+    background-color: @bg;
+}
+
+QToolTip {
+    background-color: @surface_alt;
+    color: @text;
+    border: 1px solid @border_strong;
+    border-radius: @radius_small;
+    padding: 6px 9px;
+    font-size: @font_size_small;
+}
+
+QFrame[role="separator"] {
+    background: @border;
+    max-height: 1px;
+    border: none;
+}
+
+/* Section headings and caption text, set through object names rather than by
+ * overriding QLabel globally - a global QLabel rule catches labels inside
+ * buttons and tables as well, which is never what is wanted. */
+QLabel[role="title"] {
+    font-size: @font_size_title;
+    font-weight: 700;
+    color: @text;
+}
+
+QLabel[role="heading"] {
+    font-size: @font_size_heading;
+    font-weight: 600;
+    color: @text;
+}
+
+QLabel[role="caption"] {
+    font-size: @font_size_small;
+    color: @text_muted;
+}
+
+QLabel[role="micro"] {
+    font-size: @font_size_micro;
+    color: @text_muted;
+}
+
+QLabel[role="mono"] {
+    font-family: @font_mono;
+    font-size: @font_size_small;
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: @radius_small;
+    padding: 6px 9px;
+}
+
+/* ---- 2. window frame ----------------------------------------------------
+ * The main window is frameless with a title bar drawn in Python, so these
+ * rules style that bar and its window buttons rather than a native caption.
+ * ----------------------------------------------------------------------- */
+
+QWidget#TitleBar {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @surface, stop:1 @bg_alt);
+    border-bottom: 1px solid @border;
+}
+
+QLabel#WindowTitle {
+    font-size: @font_size_heading;
+    font-weight: 600;
+    color: @text;
+    padding-left: 4px;
+}
+
+QLabel#WindowSubtitle {
+    font-size: @font_size_micro;
+    color: @text_muted;
+}
+
+QPushButton#WindowButton {
+    background: transparent;
+    border: none;
+    border-radius: @radius_small;
+    padding: 0px;
+    min-width: @titlebar_height;
+    max-width: @titlebar_height;
+    min-height: @titlebar_height;
+    max-height: @titlebar_height;
+    color: @text_muted;
+}
+
+QPushButton#WindowButton:hover {
+    background: @surface_hover;
+    color: @text;
+}
+
+QPushButton#WindowButton:pressed {
+    background: @surface_raised;
+}
+
+QPushButton#WindowCloseButton {
+    background: transparent;
+    border: none;
+    border-radius: 0px;
+    padding: 0px;
+    min-width: 46px;
+    max-width: 46px;
+    min-height: @titlebar_height;
+    max-height: @titlebar_height;
+    color: @text_muted;
+}
+
+QPushButton#WindowCloseButton:hover {
+    background: @error;
+    color: #ffffff;
+}
+
+QPushButton#WindowCloseButton:pressed {
+    background: @error_soft;
+    color: @error;
+}
+
+/* ---- 3. menus and toolbar ------------------------------------------------ */
+
+QMenuBar {
+    background: @surface;
+    color: @text_muted;
+    border-bottom: 1px solid @border;
+    padding: 2px 4px;
+}
+
+QMenuBar::item {
+    background: transparent;
+    padding: 6px 11px;
+    border-radius: @radius_small;
+}
+
+QMenuBar::item:selected {
+    background: @surface_hover;
+    color: @text;
+}
+
+QMenuBar::item:pressed {
+    background: @accent;
+    color: @text_on_accent;
+}
+
+QMenu {
+    background: @surface_alt;
+    border: 1px solid @border_strong;
+    border-radius: @radius;
+    padding: 6px;
+}
+
+QMenu::item {
+    padding: 7px 26px 7px 14px;
+    border-radius: @radius_small;
+    color: @text;
+}
+
+QMenu::item:selected {
+    background: @accent;
+    color: @text_on_accent;
+}
+
+QMenu::item:disabled {
+    color: @text_disabled;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: @border;
+    margin: 5px 8px;
+}
+
+QToolBar {
+    background: @surface;
+    border: none;
+    border-bottom: 1px solid @border;
+    padding: 6px 8px;
+    spacing: 6px;
+}
+
+QToolBar::separator {
+    background: @border;
+    width: 1px;
+    margin: 4px 6px;
+}
+
+QToolButton {
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: @radius;
+    padding: 6px 11px;
+    color: @text;
+    font-weight: 600;
+}
+
+QToolButton:hover {
+    background: @surface_hover;
+    border-color: @border_strong;
+}
+
+QToolButton:pressed {
+    background: @surface_raised;
+}
+
+QToolButton:checked {
+    background: @accent_soft;
+    border-color: @border_accent;
+    color: @text;
+}
+
+QToolButton:disabled {
+    color: @text_disabled;
+    background: transparent;
+}
+
+/* A toolbar button carrying only an icon: square, so a row of them lines up
+ * with the icon buttons inside panels. */
+QToolButton[role="icon"] {
+    padding: 6px;
+    min-width: @control_height;
+    max-width: @control_height;
+    min-height: @control_height;
+    max-height: @control_height;
+}
+
+QToolBar::handle {
+    background: transparent;
+    width: 6px;
+}
+
+/* ---- 4. tabs ------------------------------------------------------------- */
+
+QTabWidget::pane {
+    background: @surface;
+    border: 1px solid @border;
+    border-radius: @radius;
+    top: -1px;
+}
+
+QTabWidget::tab-bar {
+    alignment: left;
+}
+
+QTabBar {
+    qproperty-drawBase: 0;
+    background: transparent;
+}
+
+QTabBar::tab {
+    background: transparent;
+    color: @text_muted;
+    border: 1px solid transparent;
+    /* The underline indicator is a transparent bottom border that turns into
+     * the accent when selected. Reserving its height on every tab is what
+     * stops the row from jumping by 2px when the selection moves. */
+    border-bottom: 2px solid transparent;
+    padding: 9px 17px;
+    margin-right: 2px;
+    font-size: @font_size_body;
+    font-weight: 600;
+}
+
+QTabBar::tab:hover {
+    color: @text;
+    background: @surface_alt;
+}
+
+QTabBar::tab:selected {
+    color: @text;
+    background: @surface;
+    border: 1px solid @border;
+    border-bottom: 2px solid @accent;
+    border-top-left-radius: @radius;
+    border-top-right-radius: @radius;
+}
+
+QTabBar::tab:disabled {
+    color: @text_disabled;
+}
+
+QTabBar::close-button {
+    image: url(@icon_close_path);
+    subcontrol-position: right;
+}
+
+/* ---- 5. buttons ---------------------------------------------------------
+ * Four roles, each with its own file in components.py, plus three states the
+ * task calls for by name. The gradient is deliberately shallow - about 6% of
+ * luminance top to bottom - because a fill that is obviously a gradient looks
+ * like a screenshot of a gradient.
+ * ----------------------------------------------------------------------- */
+
+QPushButton {
+    background: @surface_raised;
+    color: @text;
+    border: 1px solid @border_strong;
+    border-radius: @radius;
+    padding: 7px 15px;
+    min-height: @control_height;
+    font-size: @font_size_body;
+    font-weight: 600;
+    text-align: center;
+}
+
+QPushButton:hover {
+    background: @surface_hover;
+    border-color: @border_accent;
+}
+
+QPushButton:pressed {
+    background: @surface_alt;
+    border-color: @border_accent;
+}
+
+QPushButton:focus {
+    border-color: @border_accent;
+    outline: none;
+}
+
+QPushButton:disabled {
+    background: @surface;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+/* Role: primary. The one action a panel is for. */
+QPushButton[role="primary"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @accent_gradient_top,
+                                stop:1 @accent_gradient_bottom);
+    color: @text_on_accent;
+    border: 1px solid @accent;
+}
+
+QPushButton[role="primary"]:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @accent_hover,
+                                stop:1 @accent);
+    border-color: @accent_hover;
+}
+
+QPushButton[role="primary"]:pressed {
+    background: @accent_press;
+    border-color: @accent_press;
+    color: @text_on_accent;
+}
+
+QPushButton[role="primary"]:disabled {
+    background: @surface_alt;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+/* Role: secondary. Outlined, for the actions beside a primary one. */
+QPushButton[role="secondary"] {
+    background: transparent;
+    color: @accent;
+    border: 1px solid @border_accent;
+}
+
+QPushButton[role="secondary"]:hover {
+    background: @accent_soft;
+    color: @text;
+    border-color: @accent_hover;
+}
+
+QPushButton[role="secondary"]:pressed {
+    background: @accent_soft;
+    color: @accent;
+}
+
+QPushButton[role="secondary"]:disabled {
+    background: transparent;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+/* Role: danger. Destructive actions only. */
+QPushButton[role="danger"] {
+    background: transparent;
+    color: @error;
+    border: 1px solid @error;
+}
+
+QPushButton[role="danger"]:hover {
+    background: @error;
+    color: #ffffff;
+    border-color: @error;
+}
+
+QPushButton[role="danger"]:pressed {
+    background: @error_soft;
+    color: @error;
+}
+
+QPushButton[role="danger"]:disabled {
+    background: transparent;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+/* Role: ghost. Toolbar-like actions inside a panel. */
+QPushButton[role="ghost"] {
+    background: transparent;
+    color: @text_muted;
+    border: 1px solid transparent;
+}
+
+QPushButton[role="ghost"]:hover {
+    background: @surface_hover;
+    color: @text;
+    border-color: @border;
+}
+
+QPushButton[role="ghost"]:pressed {
+    background: @surface_raised;
+}
+
+/* Role: icon. Square, no text. */
+QPushButton[role="icon"] {
+    padding: 5px;
+    min-width: @control_height;
+    max-width: @control_height;
+    min-height: @control_height;
+    max-height: @control_height;
+    background: transparent;
+    border: 1px solid transparent;
+    color: @text_muted;
+}
+
+QPushButton[role="icon"]:hover {
+    background: @surface_hover;
+    border-color: @border;
+    color: @text;
+}
+
+QPushButton[role="icon"]:pressed {
+    background: @surface_raised;
+}
+
+QPushButton[role="icon"]:checked {
+    background: @accent_soft;
+    border-color: @border_accent;
+    color: @accent;
+}
+
+/* A large primary action: the full width of the panel it is in. */
+QPushButton[size="large"] {
+    min-height: @control_height_lg;
+    padding: 9px 18px;
+    font-size: @font_size_heading;
+}
+
+QPushButton[size="small"] {
+    min-height: @control_height_sm;
+    padding: 4px 10px;
+    font-size: @font_size_small;
+}
+
+/* ---- 6. inputs ---------------------------------------------------------- */
+
+QLineEdit, QSpinBox, QDoubleSpinBox, QDateEdit, QTimeEdit, QPlainTextEdit, QTextEdit {
+    background: @bg_alt;
+    color: @text;
+    border: 1px solid @border_strong;
+    border-radius: @radius_small;
+    padding: 6px 9px;
+    min-height: @control_height_sm;
+    selection-background-color: @accent;
+    selection-color: @text_on_accent;
+}
+
+QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus,
+QPlainTextEdit:focus, QTextEdit:focus {
+    /* Qt has no glow, so focus reads through the border turning accent plus a
+     * light accent-tinted fill. Two cues rather than one, because a 1px border
+     * change alone is easy to miss on a busy screen. */
+    border: 1px solid @border_accent;
+    background: @surface;
+}
+
+QLineEdit:disabled, QSpinBox:disabled, QPlainTextEdit:disabled {
+    background: @surface;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+QLineEdit[readOnly="true"] {
+    background: @surface_alt;
+    color: @text_muted;
+}
+
+QLineEdit::placeholder, QPlainTextEdit::placeholder {
+    color: @text_disabled;
+}
+
+QComboBox {
+    background: @bg_alt;
+    color: @text;
+    border: 1px solid @border_strong;
+    border-radius: @radius_small;
+    padding: 6px 9px;
+    min-height: @control_height_sm;
+}
+
+QComboBox:hover {
+    border-color: @border_accent;
+}
+
+QComboBox:focus {
+    border-color: @border_accent;
+    background: @surface;
+}
+
+QComboBox:on {
+    background: @surface;
+    border-color: @border_accent;
+}
+
+QComboBox:disabled {
+    background: @surface;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+QComboBox::drop-down {
+    subcontrol-origin: padding;
+    subcontrol-position: center right;
+    width: 22px;
+    border: none;
+    background: transparent;
+}
+
+/* A real chevron, not the platform arrow. The path points at a file that
+ * icons.py writes into its cache on first use; there is no way to inline an
+ * SVG into a Qt stylesheet. */
+QComboBox::down-arrow {
+    image: url(@icon_chevron_path);
+    width: 11px;
+    height: 11px;
+}
+
+QComboBox QAbstractItemView {
+    background: @surface_alt;
+    color: @text;
+    border: 1px solid @border_strong;
+    border-radius: @radius_small;
+    padding: 4px;
+    outline: none;
+    selection-background-color: @accent;
+    selection-color: @text_on_accent;
+}
+
+QComboBox QAbstractItemView::item {
+    padding: 6px 8px;
+    border-radius: @radius_small;
+    min-height: @control_height_sm;
+}
+
+QComboBox QAbstractItemView::item:hover {
+    background: @surface_hover;
+}
+
+QSpinBox::up-button, QSpinBox::down-button,
+QDoubleSpinBox::up-button, QDoubleSpinBox::down-button {
+    background: transparent;
+    border: none;
+    width: 16px;
+}
+
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background: @surface_hover;
+}
+
+/* ---- checkboxes and radio buttons ---------------------------------------
+ * Custom indicators rather than the platform's, because the platform ones do
+ * not follow a dark palette on every OS. The tick is drawn from a cached SVG
+ * for the same reason as the combo chevron.
+ * ----------------------------------------------------------------------- */
+
+QCheckBox, QRadioButton {
+    color: @text;
+    spacing: 8px;
+    padding: 3px 0;
+}
+
+QCheckBox:disabled, QRadioButton:disabled {
+    color: @text_disabled;
+}
+
+QCheckBox::indicator, QRadioButton::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1px solid @border_strong;
+    background: @bg_alt;
+}
+
+QCheckBox::indicator {
+    border-radius: @radius_small;
+}
+
+QRadioButton::indicator {
+    border-radius: 8px;
+}
+
+QCheckBox::indicator:hover, QRadioButton::indicator:hover {
+    border-color: @border_accent;
+    background: @surface;
+}
+
+QCheckBox::indicator:checked {
+    background: @accent;
+    border-color: @accent;
+    image: url(@icon_check_path);
+}
+
+QRadioButton::indicator:checked {
+    background: @accent;
+    border-color: @accent;
+    /* The dot is the indicator's own background showing through a border that
+     * is thick enough to leave a gap; no image needed for a circle. */
+    border: 5px solid @accent;
+}
+
+QCheckBox::indicator:disabled, QRadioButton::indicator:disabled {
+    background: @surface;
+    border-color: @border;
+}
+
+QCheckBox::indicator:checked:disabled, QRadioButton::indicator:checked:disabled {
+    background: @text_disabled;
+    border-color: @text_disabled;
+}
+
+QGroupBox {
+    background: transparent;
+    border: 1px solid @border;
+    border-radius: @radius;
+    margin-top: 12px;
+    padding: @pad;
+    font-weight: 600;
+}
+
+QGroupBox::title {
+    subcontrol-origin: margin;
+    subcontrol-position: top left;
+    left: 12px;
+    padding: 0 6px;
+    color: @text_muted;
+    font-size: @font_size_small;
+}
+
+QSlider::groove:horizontal {
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: 3px;
+    height: 5px;
+}
+
+QSlider::sub-page:horizontal {
+    background: @accent;
+    border-radius: 3px;
+}
+
+QSlider::handle:horizontal {
+    background: @text;
+    border: none;
+    width: 13px;
+    height: 13px;
+    margin: -5px 0;
+    border-radius: 7px;
+}
+
+QSlider::handle:horizontal:hover {
+    background: @accent_hover;
+}
+
+/* ---- 7. cards and surfaces ---------------------------------------------- */
+
+QFrame[role="card"] {
+    background: @surface;
+    border: 1px solid @border;
+    border-radius: @radius_large;
+}
+
+QFrame[role="card-header"] {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @surface_alt, stop:1 @surface);
+    border: none;
+    border-bottom: 1px solid @border;
+}
+
+QFrame[role="inset"] {
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: @radius;
+}
+
+/* A note that has to be read: an accent bar down the left edge is enough to
+ * separate it from body text without a box that competes with the content. */
+QFrame[role="callout"] {
+    background: @surface_alt;
+    border: 1px solid @border;
+    border-left: 3px solid @accent;
+    border-radius: @radius_small;
+}
+
+QFrame[role="callout"][severity="warn"] {
+    border-left-color: @warn;
+    background: @warn_soft;
+}
+
+QFrame[role="callout"][severity="error"] {
+    border-left-color: @error;
+    background: @error_soft;
+}
+
+QFrame[role="callout"][severity="ok"] {
+    border-left-color: @ok;
+    background: @ok_soft;
+}
+
+QLabel[role="phase"] {
+    color: @warn;
+    font-size: @font_size_small;
+    font-weight: 600;
+}
+
+QLabel[role="ready"] {
+    color: @ok;
+    font-size: @font_size_small;
+    font-weight: 600;
+}
+
+/* ---- 8. tables ----------------------------------------------------------- */
+
+QTableWidget, QTableView, QTreeWidget, QTreeView, QListWidget, QListView {
+    background: @bg_alt;
+    alternate-background-color: @surface;
+    color: @text;
+    gridline-color: @border;
+    border: 1px solid @border;
+    border-radius: @radius;
+    outline: none;
+    selection-background-color: @accent;
+    selection-color: @text_on_accent;
+}
+
+QTableWidget::item, QTreeWidget::item, QListWidget::item {
+    padding: 6px 8px;
+    border: none;
+}
+
+QTableWidget::item:hover, QListWidget::item:hover {
+    background: @surface_hover;
+}
+
+QTableWidget::item:selected, QListWidget::item:selected {
+    background: @accent;
+    color: @text_on_accent;
+}
+
+QHeaderView {
+    background: @surface_alt;
+    border: none;
+}
+
+QHeaderView::section {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @surface_alt, stop:1 @surface);
+    color: @text_muted;
+    border: none;
+    border-right: 1px solid @border;
+    border-bottom: 1px solid @border;
+    padding: 7px 9px;
+    font-size: @font_size_small;
+    font-weight: 600;
+}
+
+QHeaderView::section:hover {
+    color: @text;
+    background: @surface_hover;
+}
+
+QHeaderView::section:last {
+    border-right: none;
+}
+
+QTableCornerButton::section {
+    background: @surface_alt;
+    border: none;
+    border-bottom: 1px solid @border;
+}
+
+/* ---- 9. progress -------------------------------------------------------- */
+
+QProgressBar {
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: @radius_small;
+    text-align: center;
+    color: @text;
+    font-size: @font_size_micro;
+    min-height: @progress_height;
+    max-height: 18px;
+}
+
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @accent_gradient_top,
+                                stop:1 @accent_gradient_bottom);
+    border-radius: 3px;
+}
+
+QProgressBar[state="ok"]::chunk {
+    background: @ok;
+}
+
+QProgressBar[state="warn"]::chunk {
+    background: @warn;
+}
+
+QProgressBar[state="error"]::chunk {
+    background: @error;
+}
+
+/* ---- 10. scrollbars ----------------------------------------------------- */
+
+QScrollBar:vertical {
+    background: transparent;
+    width: @scrollbar;
+    margin: 0;
+}
+
+QScrollBar:horizontal {
+    background: transparent;
+    height: @scrollbar;
+    margin: 0;
+}
+
+QScrollBar::handle {
+    background: @border_strong;
+    border-radius: 5px;
+    min-height: 30px;
+    min-width: 30px;
+}
+
+QScrollBar::handle:hover {
+    background: @text_disabled;
+}
+
+QScrollBar::handle:pressed {
+    background: @accent;
+}
+
+QScrollBar::add-line, QScrollBar::sub-line {
+    height: 0;
+    width: 0;
+    background: transparent;
+}
+
+QScrollBar::add-page, QScrollBar::sub-page {
+    background: transparent;
+}
+
+QScrollArea {
+    background: transparent;
+    border: none;
+}
+
+/* ---- 11. docks and splitters -------------------------------------------- */
+
+QDockWidget {
+    color: @text;
+    titlebar-close-icon: none;
+    titlebar-normal-icon: none;
+}
+
+QDockWidget::title {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 @surface_alt, stop:1 @surface);
+    border: 1px solid @border;
+    border-top-left-radius: @radius;
+    border-top-right-radius: @radius;
+    padding: 7px 10px;
+    text-align: left;
+    font-size: @font_size_small;
+    font-weight: 600;
+    color: @text_muted;
+}
+
+QDockWidget::close-button, QDockWidget::float-button {
+    background: transparent;
+    border: none;
+    padding: 0px;
+    icon-size: 10;
+}
+
+QDockWidget::close-button:hover, QDockWidget::float-button:hover {
+    background: @surface_hover;
+    border-radius: @radius_small;
+}
+
+QMainWindow::separator {
+    background: @border;
+    width: 3px;
+    height: 3px;
+}
+
+QMainWindow::separator:hover {
+    background: @border_accent;
+}
+
+QSplitter::handle {
+    background: @border;
+}
+
+QSplitter::handle:hover {
+    background: @border_accent;
+}
+
+QSplitter::handle:horizontal {
+    width: 3px;
+}
+
+QSplitter::handle:vertical {
+    height: 3px;
+}
+
+/* ---- 12. console -------------------------------------------------------- */
+
+QPlainTextEdit#LogConsole {
+    font-family: @font_mono;
+    font-size: @font_size_log;
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: @radius;
+    padding: 7px;
+    selection-background-color: @accent;
+}
+
+QLabel#LogSummary {
+    color: @text_muted;
+    font-size: @font_size_micro;
+}
+
+/* ---- 13. status bar, chips, dots ---------------------------------------- */
+
+QStatusBar {
+    background: @surface;
+    border-top: 1px solid @border;
+    color: @text_muted;
+    font-size: @font_size_micro;
+}
+
+QStatusBar::item {
+    border: none;
+}
+
+QStatusBar QLabel {
+    color: @text_muted;
+    font-size: @font_size_micro;
+    padding: 0 8px;
+}
+
+QLabel[role="chip"] {
+    border-radius: @radius_pill;
+    padding: 2px 11px;
+    font-size: @font_size_micro;
+    font-weight: 600;
+    background: @surface_alt;
+    color: @text_muted;
+    border: 1px solid @border;
+}
+
+QLabel[role="chip"][tone="ok"] {
+    background: @ok_soft;
+    color: @ok;
+    border-color: @ok;
+}
+
+QLabel[role="chip"][tone="warn"] {
+    background: @warn_soft;
+    color: @warn;
+    border-color: @warn;
+}
+
+QLabel[role="chip"][tone="error"] {
+    background: @error_soft;
+    color: @error;
+    border-color: @error;
+}
+
+QLabel[role="chip"][tone="accent"] {
+    background: @accent_soft;
+    color: @accent;
+    border-color: @border_accent;
+}
+
+/* ---- 14. dialogs -------------------------------------------------------- */
+
+QDialog QLabel[role="title"] {
+    font-size: @font_size_title;
+}
+
+QDialogButtonBox QPushButton {
+    min-width: 96px;
+}
+
+QMessageBox {
+    background: @surface;
+}
+
+QMessageBox QLabel {
+    color: @text;
+}
+
+QScrollArea#SettingsPage {
+    background: transparent;
+    border: none;
+}
+
+/* A device box that has a device in it is marked with an accent edge: an
+ * operator about to erase a partition needs to be certain which device the
+ * button is pointing at, and a box that looks the same either way does not
+ * give them that. */
+QWidget#DeviceBox {
+    background: @surface_alt;
+    border: 1px solid @border;
+    border-left: 3px solid @border_strong;
+    border-radius: @radius_small px;
+}
+
+QWidget#DeviceBox[selected="true"] {
+    background: @accent_soft;
+    border-color: @border_accent;
+    border-left: 3px solid @accent;
+}
+
+/* Buttons mid-operation: dimmed and clearly not pressable, which is what tells
+ * an operator the interface is working rather than broken. */
+QPushButton[busy="true"] {
+    background: @surface_alt;
+    color: @text_disabled;
+    border-color: @border;
+}
+
+/* The dim behind a modal. A frameless overlay widget rather than a real
+ * backdrop blur: Qt can blur a widget's own painting but not what is behind a
+ * sibling, and faking it with a screenshot is not worth the jank. */
+QWidget#Scrim {
+    background: @scrim;
+}
+
+/* ---- 15. toasts ---------------------------------------------------------
+ *
+ * Transient notifications. The left edge carries the tone, the same way a
+ * callout does, so a warning looks like a warning in both places rather than
+ * being a green card here and an amber bar there.
+ */
+
+QFrame#Toast {
+    background: @surface_raised;
+    border: 1px solid @border_strong;
+    border-left: 3px solid @accent;
+    border-radius: @radius;
+}
+
+QFrame#Toast[tone="ok"] {
+    border-left-color: @ok;
+}
+
+QFrame#Toast[tone="warn"] {
+    border-left-color: @warn;
+}
+
+QFrame#Toast[tone="error"] {
+    border-left-color: @error;
+}
+
+QFrame#Toast QLabel[role="heading"] {
+    font-size: @font_size_small;
+}
+
+QFrame#Toast QLabel[role="caption"] {
+    color: @text_muted;
+}
+
+/* ---- 16. operation status -----------------------------------------------
+ *
+ * The live readout in the status bar while a job runs. Its parts are set in a
+ * monospaced face because the numbers change ten times a second and a
+ * proportional font makes them shuffle sideways as they do.
+ */
+
+QWidget#OperationStatus {
+    background: @bg_alt;
+    border: 1px solid @border;
+    border-radius: @radius_small;
+}
+
+QWidget#OperationStatus QLabel {
+    color: @text_muted;
+    font-size: @font_size_micro;
+}
+
+QWidget#OperationStatus QLabel#OperationName {
+    color: @text;
+    font-size: @font_size_small;
+}
+
+QWidget#OperationStatus QLabel#OperationFigures {
+    font-family: @font_mono;
+}
+
+QWidget#OperationStatus QLabel[state="error"] {
+    color: @error;
+}
+
+QWidget#OperationStatus QLabel[state="ok"] {
+    color: @ok;
+}
+
+/* ---- 17. settings navigation and file browser ---------------------------
+ *
+ * Both are dialogs that are mostly a list with a detail pane beside it. The
+ * navigation column is drawn as a rail rather than as tabs: the categories are
+ * stable and the operator moves between them repeatedly, which is the case a
+ * vertical list is better at than a row of tabs.
+ */
+
+QListWidget#SettingsNav {
+    background: @bg_alt;
+    border: none;
+    border-right: 1px solid @border;
+    outline: none;
+    padding: 8px 6px;
+}
+
+QListWidget#SettingsNav::item {
+    height: 32px;
+    padding-left: 10px;
+    border-radius: @radius_small;
+    color: @text_muted;
+}
+
+QListWidget#SettingsNav::item:hover {
+    background: @surface_hover;
+    color: @text;
+}
+
+QListWidget#SettingsNav::item:selected {
+    background: @accent_soft;
+    color: @accent;
+    font-weight: 600;
+}
+
+QLabel#SettingsPageTitle {
+    font-size: @font_size_title;
+    font-weight: 600;
+    color: @text;
+}
+
+QLabel#SettingsPageCaption {
+    color: @text_muted;
+    font-size: @font_size_small;
+}
+
+QTreeView#FilePlaces, QListView#FileList {
+    background: @surface;
+    border: 1px solid @border;
+    border-radius: @radius_small;
+    outline: none;
+}
+
+QTreeView#FilePlaces::item, QListView#FileList::item {
+    height: 26px;
+    padding-left: 6px;
+    border-radius: @radius_small;
+}
+
+QListView#FileList::item:hover, QTreeView#FilePlaces::item:hover {
+    background: @surface_hover;
+}
+
+QListView#FileList::item:selected, QTreeView#FilePlaces::item:selected {
+    background: @accent_soft;
+    color: @accent;
+}
+
+QFrame#FilePreview {
+    background: @surface_alt;
+    border: 1px solid @border;
+    border-radius: @radius_small;
+}
+
+QFrame#FilePreview QLabel {
+    color: @text_muted;
+    font-size: @font_size_small;
+}
+
+QFrame#FilePreview QLabel#PreviewName {
+    color: @text;
+    font-weight: 600;
+}
+
+QLabel#DropHint {
+    color: @text_muted;
+    border: 2px dashed @border_strong;
+    border-radius: @radius;
+    padding: 18px;
+    font-size: @font_size_body;
+}
+
+QLabel#DropHint[active="true"] {
+    color: @accent;
+    border-color: @accent;
+    background: @accent_soft;
+}
+
