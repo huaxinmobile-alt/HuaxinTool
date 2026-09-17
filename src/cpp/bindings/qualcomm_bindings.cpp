@@ -34,6 +34,7 @@
 #include "protocols/qualcomm/qualcomm_edl.h"
 #include "protocols/qualcomm/sahara.h"
 #include "usb/usb_errors.h"
+#include "usb/usb_discovery.h"
 
 namespace py = pybind11;
 
@@ -132,6 +133,9 @@ std::vector<std::uint8_t> to_buffer(const py::bytes& data) {
 void register_qualcomm(py::module_& module) {
     static py::exception<ProtocolError>& protocol_error =
         py::register_exception<ProtocolError>(module, "ProtocolError", PyExc_RuntimeError);
+
+    py::register_exception<huaxin::usb::UsbDiscoveryError>(
+        module, "UsbDiscoveryError", protocol_error.ptr());
 
     // UsbDisconnectedError derives from ProtocolError in C++, and the Python side
     // mirrors that: it is registered with the ProtocolError type as its base, so

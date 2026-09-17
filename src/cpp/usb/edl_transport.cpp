@@ -4,6 +4,7 @@
 
 #include "core/logger.h"
 #include "usb/usb_errors.h"
+#include "usb/usb_discovery.h"
 
 #include <libusb.h>
 
@@ -76,25 +77,7 @@ EdlTransport::~EdlTransport() {
 }
 
 bool EdlTransport::device_present() {
-    libusb_context* context = nullptr;
-    if (libusb_init(&context) != LIBUSB_SUCCESS) {
-        return false;
-    }
-    libusb_device** list = nullptr;
-    const ssize_t count = libusb_get_device_list(context, &list);
-    bool found = false;
-    if (count > 0) {
-        for (ssize_t index = 0; index < count && !found; ++index) {
-            libusb_device_descriptor descriptor{};
-            if (libusb_get_device_descriptor(list[index], &descriptor) != LIBUSB_SUCCESS) {
-                continue;
-            }
-            found = descriptor.idVendor == kQualcommVid && descriptor.idProduct == kEdlPid;
-        }
-        libusb_free_device_list(list, 1);
-    }
-    libusb_exit(context);
-    return found;
+    return probe_usb_device(kQualcommVid, kEdlPid);
 }
 
 void EdlTransport::open() {
@@ -109,14 +92,14 @@ void EdlTransport::open(const Options& options) {
     libusb_context* context = nullptr;
     const int init_result = libusb_init(&context);
     if (init_result != LIBUSB_SUCCESS) {
-        throw ProtocolError("libusb_init failed: " + libusb_error_text(init_result));
+        throw UsbDiscoveryError(discovery_message(init_result, "libusb_init"));
     }
 
     libusb_device** list = nullptr;
     const ssize_t count = libusb_get_device_list(context, &list);
     if (count < 0) {
         libusb_exit(context);
-        throw ProtocolError("libusb_get_device_list failed: " + libusb_error_text(static_cast<int>(count)));
+        throw UsbDiscoveryError(discovery_message(static_cast<int>(count), "libusb_get_device_list"));
     }
 
     libusb_device* target = nullptr;

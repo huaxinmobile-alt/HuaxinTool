@@ -92,6 +92,12 @@ if(HUAXIN_BUILD_TESTS)
     # testable on its own. The protocol sources now consult the timeout and
     # speed-cap overrides in core/, which is why those two appear in suites that
     # otherwise have nothing to do with the error system.
+    add_executable(huaxin_usb_discovery_tests
+        "${CMAKE_SOURCE_DIR}/tests/cpp/test_usb_discovery.cpp")
+    target_include_directories(huaxin_usb_discovery_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(huaxin_usb_discovery_tests PRIVATE huaxin::libusb)
+    add_test(NAME usb-discovery COMMAND huaxin_usb_discovery_tests)
+
     add_executable(huaxin_protocol_tests
         "${CMAKE_SOURCE_DIR}/tests/cpp/test_qualcomm.cpp"
         protocols/qualcomm/firehose.cpp

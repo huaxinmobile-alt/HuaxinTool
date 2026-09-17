@@ -49,6 +49,7 @@ public:
     QualcommEdl& operator=(QualcommEdl&&) = delete;
 
     /// True when a 05c6:9008 device is on the bus, openable or not.
+    /// Throws UsbDiscoveryError if USB discovery fails; never reports false absence.
     static bool device_present();
 
     // -- link --------------------------------------------------------------

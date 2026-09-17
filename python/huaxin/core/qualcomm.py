@@ -359,7 +359,9 @@ def _human_bytes(count: float) -> str:
 
 def device_present() -> bool:
     """True when a 05c6:9008 device is on the bus. Safe to call on the UI thread:
-    it opens a libusb context and enumerates, nothing more."""
+    it opens a libusb context and enumerates, nothing more. Raises
+    UsbDiscoveryError if the USB subsystem cannot be initialized or enumerated;
+    False means enumeration succeeded but no matching phone was found."""
     return bool(_native().QualcommEdl.device_present())
 
 

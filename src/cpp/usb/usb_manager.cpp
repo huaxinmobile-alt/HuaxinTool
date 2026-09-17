@@ -1,4 +1,5 @@
 #include "usb/usb_manager.h"
+#include "usb/usb_discovery.h"
 
 #include <libusb.h>  // via the include directory exported by our libusb target
 
@@ -166,7 +167,7 @@ void UsbManager::open() {
     libusb_context* context = nullptr;
     const int rc = libusb_init(&context);
     if (rc != LIBUSB_SUCCESS || context == nullptr) {
-        throw UsbError("libusb_init failed", rc);
+        throw UsbError(discovery_message(rc, "libusb_init"), rc);
     }
 
     // Errors only. libusb writes to stderr directly rather than through us, and
@@ -194,7 +195,7 @@ std::vector<core::DeviceInfo> UsbManager::enumerate(const EnumerateOptions& opti
     libusb_device** raw_list = nullptr;
     const ssize_t count = libusb_get_device_list(m_context, &raw_list);
     if (count < 0) {
-        throw UsbError("libusb_get_device_list failed", static_cast<int>(count));
+        throw UsbError(discovery_message(static_cast<int>(count), "libusb_get_device_list"), static_cast<int>(count));
     }
     DeviceListGuard list_guard{raw_list};
 

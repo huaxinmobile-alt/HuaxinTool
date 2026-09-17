@@ -69,6 +69,7 @@ public:
 
     /// True when a device with the EDL VID:PID is currently on the bus, whether
     /// or not we can open it.
+    /// Throws UsbDiscoveryError if USB discovery fails; never reports false absence.
     static bool device_present();
 
     // -- IByteTransport ----------------------------------------------------
