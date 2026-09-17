@@ -97,6 +97,10 @@ bool EdlTransport::device_present() {
     return found;
 }
 
+void EdlTransport::open() {
+    open(Options{});
+}
+
 void EdlTransport::open(const Options& options) {
     if (m_handle != nullptr) {
         return;
@@ -122,8 +126,13 @@ void EdlTransport::open(const Options& options) {
             continue;
         }
         if (descriptor.idVendor == options.vid && descriptor.idProduct == options.pid) {
+            if (target != nullptr) {
+                libusb_free_device_list(list, 1);
+                libusb_exit(context);
+                throw ProtocolError("multiple matching EDL devices are connected; "
+                                    "disconnect all but the intended target before continuing");
+            }
             target = list[index];
-            break;
         }
     }
 

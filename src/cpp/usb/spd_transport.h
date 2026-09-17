@@ -46,7 +46,8 @@ public:
 
     /// Finds a Unisoc device in a download mode and opens it. Throws
     /// ProtocolError with driver guidance on failure.
-    void open(const Options& options = {});
+    void open();
+    void open(const Options& options);
 
     /// Unisoc USB IDs currently present, as "1782:4d00" style strings.
     static std::vector<std::string> devices_present();

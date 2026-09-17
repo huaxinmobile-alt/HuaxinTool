@@ -168,10 +168,11 @@ private:
     /// failures; a fresh open costs milliseconds.
     void reopen();
 
-    /// Reads one complete XML document, framed by <?xml ... </data>.
+    /// Reads through log documents to the response, preserving unread USB bytes.
     std::string read_response_document(unsigned int timeout_ms);
 
     usb::EdlTransport m_transport;
+    FirehoseReader m_reader;
     Callbacks m_callbacks;
     SaharaDeviceInfo m_info;
     std::string m_last_response;

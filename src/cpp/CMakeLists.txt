@@ -148,9 +148,11 @@ if(HUAXIN_BUILD_TESTS)
         set_target_properties(${_test_target} PROPERTIES FOLDER "tests")
     endforeach()
 
-    enable_testing()
     add_test(NAME qualcomm-protocols COMMAND huaxin_protocol_tests)
     add_test(NAME mediatek-protocols COMMAND huaxin_mediatek_tests)
     add_test(NAME samsung-protocols COMMAND huaxin_samsung_tests)
+    add_test(NAME spd-protocols COMMAND huaxin_spd_tests)
+    add_test(NAME qualcomm-write-safety
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_qualcomm_write_safety.py")
     add_test(NAME core-errors-and-logging COMMAND huaxin_core_tests)
 endif()

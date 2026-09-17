@@ -53,10 +53,11 @@ public:
     EdlTransport(EdlTransport&&) = delete;
     EdlTransport& operator=(EdlTransport&&) = delete;
 
-    /// Finds the first matching device, opens it, claims the interface and
+    /// Requires exactly one matching device, opens it, claims the interface and
     /// discovers its bulk endpoints. Throws ProtocolError with an actionable
     /// message on failure.
-    void open(const Options& options = {});
+    void open();
+    void open(const Options& options);
 
     /// Releases the interface and closes the device. Safe to call repeatedly.
     void close() noexcept;

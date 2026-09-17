@@ -870,6 +870,51 @@ void test_rawprogram_and_patch() {
           escaped);
 }
 
+void test_firehose_stream() {
+    const std::string log = "<?xml version=\"1.0\"?><data><log value=\"working\"/></data>";
+    const std::string ack = "<?xml version=\"1.0\"?><data><response value=\"ACK\"/></data>";
+    const std::string nak = "<?xml version=\"1.0\"?><data><response value=\"NAK\"/></data>";
+    const auto bytes = [](const std::string& s) {
+        return std::vector<std::uint8_t>(s.begin(), s.end());
+    };
+    FirehoseReader reader;
+    ScriptedTransport joined({bytes(log + ack + nak)});
+    const auto response = parse_firehose_response(reader.response(joined, 100));
+    check("log and ACK in one transfer are consumed together",
+          response.status == FirehoseStatus::Ack && response.logs.size() == 1);
+    check("a second response in the same transfer survives",
+          parse_firehose_response(reader.response(joined, 100)).status == FirehoseStatus::Nak);
+
+    reader.clear();
+    // Include binary NUL and XML-looking bytes to ensure raw bytes are not parsed.
+    const std::string raw("\0</data>AB", 10);
+    ScriptedTransport mixed({bytes(ack + raw + ack)});
+    reader.response(mixed, 100);
+    std::vector<std::uint8_t> payload(raw.size());
+    reader.read_exact(mixed, payload.data(), payload.size(), 100);
+    check("raw bytes following a setup ACK survive", payload == bytes(raw));
+    check("completion ACK following raw bytes survives",
+          parse_firehose_response(reader.response(mixed, 100)).status == FirehoseStatus::Ack);
+
+    reader.clear();
+    ScriptedTransport split({bytes(log.substr(0, 8)), bytes(log.substr(8)),
+                             bytes(ack.substr(0, 17)), bytes(ack.substr(17))});
+    check("fragmented log and ACK are reassembled",
+          parse_firehose_response(reader.response(split, 100)).status == FirehoseStatus::Ack);
+    reader.clear();
+    ScriptedTransport partial({bytes(ack + "AB"), bytes("CD")});
+    reader.response(partial, 100);
+    std::uint8_t four[4];
+    reader.read_exact(partial, four, 4, 100);
+    check("raw read combines buffered and unread USB bytes",
+          std::string(reinterpret_cast<char*>(four), 4) == "ABCD");
+    reader.clear();
+    ScriptedTransport only_log({bytes(log)});
+    bool timeout = false;
+    try { reader.response(only_log, 2); } catch (const ProtocolError&) { timeout = true; }
+    check("a log alone cannot complete a command", timeout);
+}
+
 }  // namespace
 
 int main() {
@@ -890,6 +935,7 @@ int main() {
     test_firehose_builders();
     test_firehose_parser();
     test_document_framing();
+    test_firehose_stream();
     test_gpt_header();
     test_gpt_entries();
     test_storage_info_extraction();

@@ -17,6 +17,10 @@ std::vector<UsbTarget> unisoc_targets() {
     };
 }
 
+void SpdTransport::open() {
+    open(Options{});
+}
+
 void SpdTransport::open(const Options& options) {
     MtkTransport::Options inner;
     inner.read_timeout_ms = options.read_timeout_ms;

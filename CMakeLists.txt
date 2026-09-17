@@ -72,4 +72,8 @@ include(Libusb)
 
 message(STATUS "Huaxin Tool ${PROJECT_VERSION} | pybind11 ${pybind11_VERSION} | Python ${Python3_VERSION} (${Python3_EXECUTABLE})")
 
+if(HUAXIN_BUILD_TESTS)
+    enable_testing()
+endif()
+
 add_subdirectory(src/cpp)

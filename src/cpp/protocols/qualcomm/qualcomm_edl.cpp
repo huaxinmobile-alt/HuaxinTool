@@ -59,6 +59,7 @@ bool QualcommEdl::device_present() {
 
 void QualcommEdl::disconnect() noexcept {
     m_transport.close();
+    m_reader.clear();
     m_programmer_loaded = false;
 }
 
@@ -128,27 +129,7 @@ SaharaDeviceInfo QualcommEdl::load_programmer(const std::string& path, bool read
 
 // --- Firehose ----------------------------------------------------------------
 std::string QualcommEdl::read_response_document(unsigned int timeout_ms) {
-    std::string pending;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
-    std::uint8_t buffer[4096];
-
-    for (;;) {
-        std::vector<std::string> documents = extract_documents(pending);
-        if (!documents.empty()) {
-            return documents.front();
-        }
-        const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
-                              deadline - std::chrono::steady_clock::now())
-                              .count();
-        if (left <= 0) {
-            throw ProtocolError("timed out waiting for a Firehose response"
-                                + (pending.empty() ? std::string{}
-                                                   : " (partial: " + pending.substr(0, 120) + ")"));
-        }
-        const std::size_t received = m_transport.read_some(buffer, sizeof(buffer),
-                                                           static_cast<unsigned int>(left));
-        pending.append(reinterpret_cast<const char*>(buffer), received);
-    }
+    return m_reader.response(m_transport, timeout_ms);
 }
 
 FirehoseResponse QualcommEdl::send_firehose(const std::string& xml, unsigned int timeout_ms) {
@@ -201,8 +182,11 @@ FirehoseResponse QualcommEdl::send_with_retry(const std::string& xml, const std:
             throw ProtocolError("cancelled by the operator");
         }
         response = send_firehose(xml, timeout_ms);
-        if (response.status != FirehoseStatus::Nak) {
+        if (response.status == FirehoseStatus::Ack) {
             return response;
+        }
+        if (response.status != FirehoseStatus::Nak) {
+            throw ProtocolError(what + ": expected an ACK or NAK response");
         }
         // A NAK is usually the programmer saying "not ready yet", so it is worth
         // another go. A protocol error or a disconnect is raised by
@@ -316,10 +300,10 @@ void QualcommEdl::program_partition(const ProgramRequest& request,
 
     const std::uint64_t expected =
         static_cast<std::uint64_t>(request.num_partition_sectors) * request.sector_size_in_bytes;
-    if (expected != 0 && image.size() > expected) {
+    if (expected == 0 || image.size() != expected) {
         throw ProtocolError("the image is " + std::to_string(image.size())
                             + " bytes but the request only claims room for "
-                            + std::to_string(expected) + "; refusing to write past the partition");
+                            + std::to_string(expected) + "; payload must exactly match the declared sector range");
     }
 
     // 1. the command, then the setup acknowledgement.
@@ -393,7 +377,7 @@ std::vector<std::uint8_t> QualcommEdl::read_partition(const ReadRequest& request
         }
         const std::size_t count =
             static_cast<std::size_t>(std::min<std::uint64_t>(1024 * 1024, total - received));
-        m_transport.read_exact(data.data() + received, count, timeout_ms);
+        m_reader.read_exact(m_transport, data.data() + received, count, timeout_ms);
         received += count;
         if (m_progress) {
             m_progress(received, total);
