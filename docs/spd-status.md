@@ -5,7 +5,9 @@ guessed around: the `.pac` container layout and the Research Download framing
 could not be verified, and this project does not invent proprietary byte
 structures. See the end of this document for what that blocker was.
 
-**It is resolved.** Both formats are now implemented and tested.
+**It is resolved.** Both formats are now implemented and tested — and, since
+then, wired: a device in Research Download mode can be opened and read. What the
+tab still refuses to do, and why, is in "What is not done".
 
 ## What the blocker was
 
@@ -42,6 +44,9 @@ found four.
 | BSL protocol and framing | `protocols/spd/bsl.{h,cpp}` | A scripted device, frame by frame |
 | FDL1 / FDL2 extraction | `PacLoaders` in `pac.h` | The same built packages |
 | USB transport | `usb/spd_transport.{h,cpp}` | Enumeration only; the protocol is tested without USB |
+| Session facade | `protocols/spd/unisoc_bsl.{h,cpp}` | Calls the BSL session; adds no protocol logic of its own |
+| Python bindings | `bindings/spd_bindings.cpp` | `UnisocBsl`, `BslChipInfo`, and the checks in `tests/test_samsung.py` |
+| Tab actions | `ui/panels.py`, `core/unisoc.py` | Handshake, read info, read-back, reset and power-off |
 
 `tests/cpp/test_spd.cpp` runs **122 checks** covering: the four checksums against
 their published values, both PAC layouts, wrong magic, truncation, an implausible
@@ -53,10 +58,22 @@ the refusal paths.
 
 ## What is not done
 
-- **The Python wrapper and the tab's buttons.** `protocols/spd/` is not yet
-  exposed through pybind11, so the SPD tab still reports that its actions are
-  unavailable. It says *that*, and not "blocked", because blocked is no longer
-  true.
+- **Replaying a `.pac` package.** This is the one the tab refuses to offer. The
+  pieces exist and are tested in isolation — the parser, the loaders, and
+  `execute_payload`, which sends `START_DATA` / `MIDST_DATA` / `END_DATA` and
+  optionally `EXEC_DATA` and is the same primitive that loads a MediaTek agent —
+  but the **handover between FDL1 and FDL2 is not settled by any source this
+  project holds**: whether the device re-enumerates when FDL1 runs, and what it
+  expects before FDL2's data. A sequence guessed from the shape of the protocol
+  would be run against somebody's phone, and a wrong guess there is a bricked
+  device, so the button is absent rather than approximate. What *is* wired is
+  driven by data the package itself carries: a selected entry's address and size
+  are the range that read-back reads.
+- **Erase and write from the interface.** Both exist in the session
+  (`bsl.erase_flash`, `bsl.write_flash`, both using proven framing) and are bound
+  for a caller that knows the range. Neither has a button, because neither has a
+  dialog that collects an address and a length safely, and an erase button that
+  guessed a range would be the worst control in the tool.
 - **`READ_FLASH_INFO`'s reply layout.** The command and its response code are
   confirmed; the fields inside the reply are not, so the bytes are returned raw
   rather than sliced into named fields that might be wrong.

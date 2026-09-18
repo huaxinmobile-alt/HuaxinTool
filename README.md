@@ -68,7 +68,8 @@ screen.
 | 7     | Unisoc Research Download: PAC parser (both layouts), BSL protocol, four checksums | Done in C++, 122 native checks |
 | 8     | Unified error system, centralised logging, progress reporting, settings, device database | Done |
 | 8     | USB driver guide, PyInstaller packaging, documentation, test suite | Done |
-| 9     | Samsung and Unisoc: USB transports, pybind11 bindings, Python wrappers, tab actions | **Next** |
+| 9a    | Unisoc: session facade, bindings, wrapper, tab actions | Done — reads a device; package replay is not offered, and `docs/spd-status.md` says why |
+| 9b    | Samsung: USB transport, session, bindings, wrapper, tab actions | **Next** |
 
 Device discovery is real: the backend enumerates the USB bus through libusb and
 identifies each device by VID/PID against a catalogue. ADB and Fastboot work —
@@ -79,10 +80,16 @@ bootrom handshake, uploads a download agent, and then drives that agent's own
 protocol to read the flash geometry, replay a scatter package, read partitions
 back and erase them.
 
-The two remaining vendor **download** modes are the honest gap: their protocols
-exist and are tested, but a device in those modes can currently only be listed
-and selected, not acted on. Those tabs say exactly that rather than offering a
-button that cannot work.
+Unisoc now speaks to a device as well: a phone in Research Download mode can be
+opened, asked what it is, read back, reset and powered off. What that tab does
+*not* do is replay a `.pac`, and it says so in as many words — the FDL1-to-FDL2
+handover is not settled by any source this project holds, and a guessed sequence
+against a phone is worse than no sequence.
+
+Samsung is the remaining gap: its PIT parser, Odin session and `.tar.md5` reader
+are implemented and tested, but there is no USB transport behind them, so a
+device in Download mode can be listed and its packages inspected and nothing
+more. That tab says exactly that rather than offering a button that cannot work.
 
 ## Repository layout
 
@@ -1030,6 +1037,47 @@ because a Cancel click often lands in the gap before the worker picks the job up
   unverified carries an explicit `TODO` rather than a guess.
 
 ## Changelog
+
+### 0.8.3 — Unisoc reads a device
+
+**The Research Download link works.** `protocols/spd/unisoc_bsl.{h,cpp}` is the
+SPD counterpart of `MediaTekBrom`: one object that owns the transport and the BSL
+session, with log, progress and cancel callbacks. It adds no protocol logic of
+its own — every call it makes was already implemented and covered by the 133
+native checks — which is the point of separating it from the protocol layer.
+
+Bound as `huaxin_core.UnisocBsl` with `py::gil_scoped_release` around every call
+that blocks on USB, because without that release opening a device would freeze
+the interface for as long as the device takes to answer. Wrapped in
+`core/unisoc.py`, which is where the session, the error messages and the job
+functions live.
+
+**The tab has buttons that do something.** Handshake, Read Device Info, Read Back
+Entry, Reset Device and Power Off replace the four that used to say the transport
+was missing. Read-back takes its address and length from the *selected package
+entry*, which is what makes it a button rather than a form: the package already
+says where the data should be, and comparing what comes back against it is the
+check worth doing.
+
+**What is still refused, and why.** `Flash PAC Firmware` is not wired, and the
+button says so. The parser, the loaders and the payload primitive are all present
+and tested; what is missing is the FDL1-to-FDL2 handover, which no source this
+project holds settles. A guessed sequence would be run against somebody's phone.
+Erase and write exist in the session, bound and usable by a caller that knows the
+range, but neither has a button — an erase control that guessed an address range
+would be the worst control in the tool.
+
+**Four bugs of the user's own, found by checking rather than assuming.**
+`apply_gsm_layout()` and the `showEvent` override called `hasattr(self,
+'log_dock')` against attributes actually named `_log_dock`, so both were dead
+code that silently did nothing. Locking the docks with `NoDockWidgetFeatures`
+also *disables* Qt's `toggleViewAction`, leaving two permanently greyed-out
+entries in the View menu — so the docks are locked and those two menu items are
+gone rather than dead. And `main.py` had grown a fallback that constructed
+`MainWindow()` with no service, which would have raised TypeError on a path
+nothing exercises; the high-DPI policy it also set was worth keeping and moved to
+`huaxin/app.py`, where every entry point gets it and where the ordering
+requirement (before the QApplication exists) can be stated.
 
 ### 0.8.2 — a missing adb now leads somewhere
 

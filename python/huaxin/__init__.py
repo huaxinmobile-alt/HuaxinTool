@@ -15,4 +15,4 @@ The compiled backend extension is imported as the top-level module `huaxin_core`
 package.
 """
 
-__version__ = "0.8.2"
+__version__ = "0.8.3"

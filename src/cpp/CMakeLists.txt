@@ -38,6 +38,7 @@ set(HUAXIN_CORE_SOURCES
     protocols/spd/bsl.cpp
     protocols/spd/checksum.cpp
     protocols/spd/pac.cpp
+    protocols/spd/unisoc_bsl.cpp
     protocols/qualcomm/sahara.cpp
     usb/edl_transport.cpp
     usb/mtk_transport.cpp

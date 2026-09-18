@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import os
 import struct
+import pathlib
 import sys
 import tempfile
 from pathlib import Path
@@ -140,20 +141,73 @@ def main() -> int:
 
     print("\n5. SPD reports its real state rather than pretending")
 
-    # The .pac parser and the Research Download protocol are implemented and
-    # tested in C++ now, so "blocked" would be false. What is missing is the
-    # Python wrapper and the tab's wiring, and that is what the message says.
-    check("the message says the protocol layer is done",
-          "implemented" in unisoc.PENDING_REASON.lower(),
+    # The message has moved on twice: it first said "blocked", then "implemented
+    # but not wired", and it now describes a working session that stops short of
+    # replaying a package. What matters is that it names the missing part rather
+    # than only the working one - a status line that lists what works and stops is
+    # how a tool ends up quietly claiming more than it does.
+    check("the message says what can be done",
+          "handshake" in unisoc.PENDING_REASON.lower(),
           unisoc.PENDING_REASON[:60])
     check("the message names what is still missing",
-          "wrapper" in unisoc.PENDING_REASON.lower()
-          and "wired" in unisoc.PENDING_REASON.lower())
+          "not implemented" in unisoc.PENDING_REASON.lower()
+          and "fdl1" in unisoc.PENDING_REASON.lower(),
+          unisoc.PENDING_REASON[:120])
+    check("and says why it is not attempted",
+          "primary source" in unisoc.PENDING_REASON.lower())
     check("it points at the status document", "spd-status.md" in unisoc.PENDING_REASON)
     check("it does not still claim the protocol is blocked",
           "blocked" not in unisoc.PENDING_REASON.lower())
     check("the old name still resolves, so an existing import does not break",
           unisoc.BLOCKED_REASON is unisoc.PENDING_REASON)
+
+    # --- the session wrapper's guards ---------------------------------------
+    #
+    # The session needs a device, and there is none in this test process, so what
+    # can be checked here is the part that runs *before* the device does: the
+    # refusals. Each of these is a mistake an operator can make, and each has to
+    # fail with something they can act on rather than with a stack trace.
+    from huaxin.core.unisoc import UnisocNotReadyError
+
+    check("the session class is bound in the native module",
+          hasattr(huaxin_core, "UnisocBsl") and hasattr(huaxin_core, "BslChipInfo"),
+          "huaxin_core.UnisocBsl / BslChipInfo")
+    check("the native class reports the download-mode ids it looks for",
+          hasattr(huaxin_core.UnisocBsl, "devices_present"))
+
+    check("nothing is open to begin with", not unisoc.session_open())
+    check("closing nothing is not an error", unisoc.release_session(FakeContext()) is False)
+
+    ctx = FakeContext()
+    try:
+        unisoc.bsl_read_device_info(ctx)
+        check("reading with no session is refused", False, "no exception")
+    except UnisocNotReadyError as exc:
+        check("reading with no session is refused", True, str(exc)[:50])
+        check("and the refusal says how to open one",
+              "handshake" in str(exc).lower(), str(exc)[:70])
+
+    ctx = FakeContext()
+    try:
+        unisoc.bsl_connect(ctx)
+        check("connecting with no device attached is refused", False, "no exception")
+    except UnisocNotReadyError as exc:
+        check("connecting with no device attached is refused", True)
+        check("and the refusal names the mode and the driver",
+              "research download" in str(exc).lower() and "driver" in str(exc).lower(),
+              str(exc)[:90])
+
+    # The read-back guards run before any device call, so they are reachable here.
+    ctx = FakeContext()
+    for length, address, why in ((0, 0, "a zero-length read"), (-5, 0, "a negative length"),
+                                 (16, 0x1_0000_0000, "an address wider than the protocol")):
+        try:
+            unisoc.bsl_read_region(ctx, address, length, pathlib.Path("nowhere.bin"))
+            check(f"{why} is refused", False, "no exception")
+        except UnisocNotReadyError:
+            check(f"{why} is refused", True, "refused before the device is touched")
+        except ValueError as exc:
+            check(f"{why} is refused", True, str(exc)[:50])
 
     ctx = FakeContext()
     unisoc.verify_toolchain(ctx)
@@ -205,22 +259,33 @@ def main() -> int:
     spd_panel = tabs.widget(spd_index)
     labels = [label.text() for label in spd_panel.findChildren(QLabel)]
     spd_buttons = {b.text(): b for b in spd_panel.findChildren(QPushButton)}
-    check("the SPD panel states that the protocol is implemented and tested",
-          any("implemented and covered by" in text for text in labels),
-          next((t for t in labels if "implemented and covered" in t), "not found")[:70])
-    check("the banner says package inspection works",
-          any("Package inspection works" in text for text in labels))
-    check("the banner says flashing does not",
-          any("flashing does not" in text for text in labels))
+    # The Unisoc tab used to be read-only: package inspection worked and every
+    # device button said the transport was missing. The transport exists now, so
+    # these ask the questions that still matter - does it say what it can do, and
+    # is it still honest about the one thing it cannot?
+    check("the banner says a device can be read",
+          any("does not replay a package yet" in text for text in labels),
+          next((t for t in labels if "does not replay" in t), "not found")[:70])
+    check("and names the handover that is missing",
+          any("FDL1-to-FDL2" in text for text in labels))
     check("the banner no longer says blocked",
           not any("BLOCKED" in text for text in labels))
-    check("the SPD actions are present", len(spd_buttons) == 6, str(sorted(spd_buttons)))
+    check("the SPD actions are present", len(spd_buttons) == 8, str(sorted(spd_buttons)))
     check("the PAC loader is implemented",
           "Not implemented" not in spd_buttons["Load PAC File…"].toolTip(),
           spd_buttons["Load PAC File…"].toolTip()[:60])
-    check("the SPD handshake says it is unavailable",
-          "Not available" in spd_buttons["Research Download Handshake"].toolTip(),
+    check("the SPD handshake is real now",
+          "Not available" not in spd_buttons["Research Download Handshake"].toolTip(),
           spd_buttons["Research Download Handshake"].toolTip()[:60])
+    check("and its tooltip explains the driver requirement",
+          "driver" in spd_buttons["Research Download Handshake"].toolTip().lower(),
+          spd_buttons["Research Download Handshake"].toolTip()[:80])
+    check("read-back is wired to a button",
+          "Read Back Entry…" in spd_buttons)
+    check("flashing a package is still refused, with the reason",
+          "primary source" in spd_buttons["Flash PAC Firmware"].toolTip()
+          or "FDL1" in spd_buttons["Flash PAC Firmware"].toolTip(),
+          spd_buttons["Flash PAC Firmware"].toolTip()[:80])
     window.close()
 
     failed = [r for r in RESULTS if not r[0]]

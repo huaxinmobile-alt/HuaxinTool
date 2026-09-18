@@ -80,6 +80,11 @@ from huaxin.core.mediatek import (
 from huaxin.core.samsung import parse_pit_file as samsung_parse_pit
 from huaxin.core.samsung import verify_toolchain as samsung_verify_toolchain
 from huaxin.core.unisoc import PENDING_REASON
+from huaxin.core.unisoc import bsl_connect as spd_connect
+from huaxin.core.unisoc import bsl_power_off as spd_power_off
+from huaxin.core.unisoc import bsl_read_device_info as spd_read_device_info
+from huaxin.core.unisoc import bsl_read_region as spd_read_back
+from huaxin.core.unisoc import bsl_reset as spd_reset
 from huaxin.core.unisoc import verify_toolchain as spd_verify_toolchain
 from huaxin.core.qualcomm import (
     apply_patch as edl_apply_patch,
@@ -1403,10 +1408,11 @@ class SpdPanel(VendorPanel):
                 "writes nothing."
             ),
             banner=(
-                "\u25d0  Package inspection works; flashing does not \u2014 the .pac parser and "
-                "the Research Download protocol are implemented and covered by 133 native "
-                "checks, but the protocol is not exposed and has no USB transport, so the "
-                "buttons that write to a device report that instead. See docs/spd-status.md."
+                "\u25d0  Reads a device and its flash; does not replay a package yet \u2014 the "
+                "Research Download link works (handshake, device identity, read-back, reset, "
+                "power-off) and .pac inspection works. Flashing a package is not offered: the "
+                "FDL1-to-FDL2 handover needs a primary source this project does not have. See "
+                "docs/spd-status.md."
             ),
             state="partial",
             body=self._pac_view,
@@ -1432,27 +1438,44 @@ class SpdPanel(VendorPanel):
                 ),
                 ActionSpec(
                     "handshake", "Research Download Handshake",
-                    "Not available: the protocol is implemented but has no USB transport, so "
-                    "there is nothing to drive it with.",
-                    icon="power", requires_device=False, handler=self._act_unavailable,
+                    "Opens the device and runs the BSL hello, then reads what it says about "
+                    "itself. The device must be in Research Download mode with the right USB "
+                    "driver bound; without that the link is silently dead.",
+                    icon="power", requires_device=False, handler=self._act_handshake,
                 ),
                 ActionSpec(
                     "read_info", "Read Device Info",
-                    "Not available: needs the handshake, which needs the transport.",
-                    icon="info", requires_device=False, handler=self._act_unavailable,
+                    "Re-reads chip type, flash type, sector size and chip UID from the open "
+                    "link. A device may decline any of them, which the log says rather than "
+                    "showing a zero.",
+                    icon="info", requires_device=False, handler=self._act_read_info,
+                ),
+                ActionSpec(
+                    "read_back", "Read Back Entry…",
+                    "Reads the selected package entry's address range off the device into a "
+                    "file. Read-back is the check that does not depend on trusting the tool "
+                    "that wrote the flash.",
+                    icon="read", requires_device=False, handler=self._act_read_back,
                 ),
                 ActionSpec(
                     "flash_pac", "Flash PAC Firmware",
-                    "Not available: writing needs the transport. The package can still be "
-                    "inspected, which is the part that catches a wrong or truncated download.",
+                    "Not available, and deliberately not attempted: replaying a package needs "
+                    "the FDL1-to-FDL2 handover, which needs a primary source this project "
+                    "does not have. A guessed sequence against a phone is worse than no "
+                    "sequence at all.",
                     icon="flash", requires_device=False, danger=True,
                     handler=self._act_unavailable,
                 ),
                 ActionSpec(
-                    "erase_flash", "Erase Flash",
-                    "Not available: erasing needs the transport.",
-                    icon="erase", requires_device=False, danger=True,
-                    handler=self._act_unavailable,
+                    "reset", "Reset Device",
+                    "Restarts the device out of download mode and closes the session - the "
+                    "usual last step after a read-back.",
+                    icon="refresh", requires_device=False, handler=self._act_reset,
+                ),
+                ActionSpec(
+                    "power_off", "Power Off",
+                    "BSL_CMD_POWER_OFF, for a device whose download mode has no reset path.",
+                    icon="stop", requires_device=False, handler=self._act_power_off,
                 ),
             ),
             parent=parent,
@@ -1462,6 +1485,42 @@ class SpdPanel(VendorPanel):
 
     def _act_status(self, _device: Device | None) -> None:
         self._service.submit("spd.status", spd_verify_toolchain)
+
+    def _act_handshake(self, _device: Device | None) -> None:
+        self._service.submit("spd.handshake", spd_connect, self)
+
+    def _act_read_info(self, _device: Device | None) -> None:
+        self._service.submit("spd.info", spd_read_device_info)
+
+    def _act_read_back(self, _device: Device | None) -> None:
+        """Reads the selected package entry's range off the device.
+
+        The address and the length come from the package the operator loaded, which is
+        what makes this a button rather than a form: the entry IS the range, and reading
+        back what the package claims is the check worth doing.
+        """
+        entry = self._pac_view.selected_entry()
+        if entry is None:
+            self._service.log_message(
+                "warn", "select a package entry first - its address and size are the "
+                        "range that gets read")
+            return
+
+        name = entry.file_name or entry.file_id
+        destination = filedialog.save_file_name(
+            self, "Save the read-back as", str(Path.home() / f"{name}.bin"),
+            "Binary images (*.bin *.img);;All files (*)",
+        )
+        if not destination:
+            self._service.log_message("info", "read-back cancelled")
+            return
+        self._service.submit("spd.read_back", _read_back_entry, entry, Path(destination), self)
+
+    def _act_reset(self, _device: Device | None) -> None:
+        self._service.submit("spd.reset", spd_reset)
+
+    def _act_power_off(self, _device: Device | None) -> None:
+        self._service.submit("spd.power_off", spd_power_off)
 
     def _act_load_pac(self, _device: Device | None) -> None:
         path_str, _ = filedialog.open_file_name(
@@ -1513,6 +1572,26 @@ class SpdPanel(VendorPanel):
                 "not available.",
                 "partial",
             )
+
+
+def _read_back_entry(ctx, entry, destination: Path, panel) -> Path:
+    """Reads a package entry's range off the device, on the worker thread.
+
+    The range comes from the entry, so this is the one read operation that needs
+    no form: the package already says where the data should be, and comparing what
+    comes back against the package is the check worth doing.
+
+    A short read is treated as a failure rather than as a smaller answer - see
+    `bsl_read_region`, which refuses to write a truncated file.
+    """
+    written = spd_read_back(ctx, int(entry.address), int(entry.size), destination)
+    name = entry.file_name or entry.file_id
+    QTimer.singleShot(0, lambda: panel.set_status(
+        f"✔  Read {int(entry.size):,} bytes of {name} back into {written.name}. "
+        "Compare it against the package before trusting what is on the device.",
+        "ok",
+    ))
+    return written
 
 
 def _read_pac(ctx, path: Path, panel) -> object:

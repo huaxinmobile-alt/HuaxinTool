@@ -265,9 +265,13 @@ def main() -> int:
             ["List ADB Devices", "Read Device Info (adb)", "Reboot to EDL",
              "Flash Partition (fastboot)", "Wipe Data (fastboot -w)"],
         ),
+        # The Unisoc tab gained a real device session: handshake, read-back, reset
+        # and power-off replaced the two buttons that used to say the transport was
+        # missing. Flashing a package is still absent, deliberately - see the tab.
         "SpdPanel": (
-            ["Check Device", "Research Download Handshake", "Flash PAC Firmware"],
-            ["Load PAC File…", "Read Device Info", "Erase Flash"],
+            ["Check Device", "Research Download Handshake", "Read Back Entry…",
+             "Reset Device"],
+            ["Load PAC File…", "Read Device Info", "Flash PAC Firmware", "Power Off"],
         ),
         "SamsungPanel": (
             ["Check Download Mode", "Read PIT From Device", "Flash (Odin)"],

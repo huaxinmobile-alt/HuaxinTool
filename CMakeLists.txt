@@ -16,7 +16,7 @@ cmake_minimum_required(VERSION 3.20)
 # C is required as well as CXX: libusb is C, and on Windows we compile it from
 # source (see cmake/Libusb.cmake).
 project(HuaxinTool
-        VERSION 0.8.2
+        VERSION 0.8.3
         DESCRIPTION "Multi-vendor Android firmware flashing and software repair tool"
         LANGUAGES C CXX)
 

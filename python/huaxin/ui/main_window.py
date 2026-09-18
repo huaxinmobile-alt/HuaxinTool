@@ -70,6 +70,11 @@ _DEFAULT_SIZE = (1360, 860)
 _DEFAULT_DEVICE_DOCK_WIDTH = 420
 _DEFAULT_LOG_DOCK_HEIGHT = 220
 
+#: The shortest the log dock may ever be dragged to. A log strip two lines tall is
+#: the first thing an operator complains about and the last thing they think to
+#: resize, so it has a floor rather than only a default.
+_LOG_DOCK_MIN_HEIGHT = 260
+
 #: (key, panel class). The order is the tab order, and the class is built on
 #: first visit - see `_ensure_panel`. The tab's label and icon are read from the
 #: class's own `tab_name` and `tab_icon` rather than repeated here, so a panel
@@ -337,6 +342,17 @@ class MainWindow(FramelessWindow):
         self._drop_hint.setVisible(False)
 
     def _build_docks(self) -> None:
+        """Builds the two docks, fixed in place.
+
+        The docks are deliberately not movable and not floatable. A panel that
+        can be torn off and left floating over the tabs is a panel somebody drags
+        away by accident and then cannot find again, and every tool in this market
+        keeps its device list and its log where they are. The cost is stated
+        rather than hidden: Qt *disables* a dock's View-menu toggle when the dock
+        cannot be closed, so those two menu entries are not added at all - a menu
+        item that looks clickable and does nothing is worse than no menu item.
+        **Reset Layout** is the way back if a dock ends up hidden.
+        """
         self._device_panel = DevicePanel(self)
         devices_dock = QDockWidget("Devices", self)
         devices_dock.setObjectName("DevicesDock")
@@ -355,11 +371,17 @@ class MainWindow(FramelessWindow):
         )
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, log_dock)
 
+        # Both docks, once, after both exist - each is locked against dragging,
+        # floating and closing. The log also gets a floor on its height: a log
+        # strip two lines tall is the first thing an operator complains about and
+        # the last thing they think to resize.
+        for dock in (devices_dock, log_dock):
+            dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
+            dock.setFloating(False)
+        log_dock.setMinimumHeight(_LOG_DOCK_MIN_HEIGHT)
+
         self._devices_dock = devices_dock
         self._log_dock = log_dock
-        self._view_menu.addSeparator()
-        self._view_menu.addAction(devices_dock.toggleViewAction())
-        self._view_menu.addAction(log_dock.toggleViewAction())
         self._view_menu.addSeparator()
         self._view_menu.addAction(self._action_reset_layout)
 

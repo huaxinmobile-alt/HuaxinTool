@@ -1,11 +1,16 @@
 // =============================================================================
 //  Python bindings for the Unisoc / Spreadtrum PAC package format.
 //
-//  Reading a package, not talking to a device: the research-download protocol is
-//  implemented and tested in protocols/spd/, but it is not exposed yet and the
-//  tab says so. What this file enables is the useful half that needs no device -
-//  opening a .pac and showing what is in it, which is how an operator checks
-//  they have the right package before touching any hardware.
+//  Two things: reading a package, and talking to a device.
+//
+//  The package half needs no hardware - opening a .pac and showing what is in it
+//  is how an operator checks they have the right file before touching anything.
+//
+//  The device half is `UnisocBsl`, the Research Download session. It is bound the
+//  same way MediaTekBrom is: a class that owns its own transport, Python callbacks
+//  for the log, the progress and the cancel check, and `py::gil_scoped_release`
+//  around every call that blocks on USB - without that release, opening a device
+//  would freeze the whole interface for as long as the device takes to answer.
 //
 //  `read_pac_header` is the one the UI uses. It reads the header and the entry
 //  table and stops, because a PAC is hundreds of megabytes to a few gigabytes
@@ -18,11 +23,13 @@
 #include <pybind11/stl.h>
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
 #include "core/flash_error.h"  // Vendor
 #include "protocols/spd/pac.h"
+#include "protocols/spd/unisoc_bsl.h"
 
 namespace py = pybind11;
 
@@ -30,7 +37,9 @@ using huaxin::protocols::spd::PacEntry;
 using huaxin::protocols::spd::PacEntryRole;
 using huaxin::protocols::spd::PacFile;
 using huaxin::protocols::spd::PacHeaderInfo;
+using huaxin::protocols::spd::ChipInfo;
 using huaxin::protocols::spd::PacVersion;
+using huaxin::protocols::spd::UnisocBsl;
 
 namespace huaxin::bindings {
 
@@ -128,6 +137,126 @@ void register_spd(py::module_& module) {
         .def("summary", &PacFile::summary, "One line describing the package.")
         .def("__len__", [](const PacFile& self) { return self.entries.size(); })
         .def("__repr__", [](const PacFile& self) { return "PacFile(" + self.summary() + ")"; });
+
+    // -- the device session ----------------------------------------------------
+    py::class_<ChipInfo>(module, "BslChipInfo",
+                         "What the Unisoc boot ROM reports about itself and its flash. "
+                         "Every field is optional: a device that refuses one query leaves "
+                         "that field unset rather than failing the whole reading.")
+        .def_readonly("boot_version", &ChipInfo::boot_version)
+        .def_readonly("have_chip_type", &ChipInfo::have_chip_type)
+        .def_readonly("chip_type", &ChipInfo::chip_type)
+        .def_readonly("have_flash_info", &ChipInfo::have_flash_info)
+        .def_readonly("flash_info", &ChipInfo::flash_info)
+        .def_readonly("have_flash_type", &ChipInfo::have_flash_type)
+        .def_readonly("flash_type", &ChipInfo::flash_type)
+        .def_readonly("have_sector_size", &ChipInfo::have_sector_size)
+        .def_readonly("sector_size", &ChipInfo::sector_size)
+        .def_readonly("have_chip_uid", &ChipInfo::have_chip_uid)
+        .def_readonly("chip_uid", &ChipInfo::chip_uid)
+        .def("describe", &ChipInfo::describe, "One line for the log.")
+        .def("__repr__",
+             [](const ChipInfo& self) { return "BslChipInfo(" + self.describe() + ")"; });
+
+    py::class_<UnisocBsl>(module, "UnisocBsl",
+                          "Unisoc Research Download session: USB transport plus the BSL "
+                          "conversation. Nothing here touches a device except the calls "
+                          "named for what they do.")
+        .def(py::init([](const py::object& log, const py::object& progress,
+                         const py::object& cancelled) {
+                 UnisocBsl::Callbacks callbacks;
+                 if (!log.is_none()) {
+                     auto function = py::reinterpret_borrow<py::function>(log);
+                     callbacks.log = [function](const std::string& level,
+                                                const std::string& message) {
+                         py::gil_scoped_acquire acquire;
+                         try {
+                             function(level, message);
+                         } catch (py::error_already_set& error) {
+                             error.discard_as_unraisable("huaxin log callback");
+                         }
+                     };
+                 }
+                 if (!progress.is_none()) {
+                     auto function = py::reinterpret_borrow<py::function>(progress);
+                     callbacks.progress = [function](int percent, const std::string& message) {
+                         py::gil_scoped_acquire acquire;
+                         try {
+                             function(percent, message);
+                         } catch (py::error_already_set& error) {
+                             error.discard_as_unraisable("huaxin progress callback");
+                         }
+                     };
+                 }
+                 if (!cancelled.is_none()) {
+                     auto function = py::reinterpret_borrow<py::function>(cancelled);
+                     callbacks.cancelled = [function]() -> bool {
+                         py::gil_scoped_acquire acquire;
+                         try {
+                             return function().cast<bool>();
+                         } catch (py::error_already_set& error) {
+                             error.discard_as_unraisable("huaxin cancel callback");
+                             return false;
+                         }
+                     };
+                 }
+                 return std::make_unique<UnisocBsl>(std::move(callbacks));
+             }),
+             py::arg("log") = py::none(), py::arg("progress") = py::none(),
+             py::arg("cancelled") = py::none())
+        .def_static("devices_present", &UnisocBsl::devices_present,
+                    "Unisoc download-mode USB IDs on the bus, e.g. ['1782:4d00'].")
+        .def("connect", [](UnisocBsl& self) {
+                 py::gil_scoped_release release;
+                 self.connect();
+             },
+             "Opens the device and runs the BSL hello. Throws with driver guidance "
+             "when there is no device, or when it does not answer as a boot ROM does.")
+        .def("handshake", [](UnisocBsl& self) {
+                 py::gil_scoped_release release;
+                 self.handshake();
+             },
+             "BSL_CMD_CONNECT. Idempotent, and connect() alone does not do it.")
+        .def("disconnect", &UnisocBsl::disconnect)
+        .def("connected", &UnisocBsl::connected)
+        .def("handshaked", &UnisocBsl::handshaked)
+        .def("describe", &UnisocBsl::describe)
+        .def("checksum_name", &UnisocBsl::checksum_name,
+             "Which checksum the link settled on, as text.")
+        .def("read_device_info", [](UnisocBsl& self) {
+                 py::gil_scoped_release release;
+                 return self.read_device_info();
+             },
+             "Every query the boot ROM answers, as a BslChipInfo.")
+        .def("chip_info", &UnisocBsl::chip_info, py::return_value_policy::reference_internal)
+        .def("erase_flash", [](UnisocBsl& self, std::uint32_t address, std::uint32_t length) {
+                 py::gil_scoped_release release;
+                 self.erase_flash(address, length);
+             },
+             py::arg("address"), py::arg("length"),
+             "Erases an address range. DESTRUCTIVE: that is the whole point of it.")
+        .def("read_flash", [](UnisocBsl& self, std::uint32_t address, std::uint32_t length) {
+                 py::gil_scoped_release release;
+                 return self.read_flash(address, length);
+             },
+             py::arg("address"), py::arg("length"), "Reads a region back as bytes.")
+        .def("write_flash", [](UnisocBsl& self, std::uint32_t address,
+                               const std::vector<std::uint8_t>& data,
+                               const std::string& what) {
+                 py::gil_scoped_release release;
+                 return self.write_flash(address, data, what);
+             },
+             py::arg("address"), py::arg("data"), py::arg("what") = "flash data",
+             "Writes data to a flash address. DESTRUCTIVE.")
+        .def("reset", [](UnisocBsl& self) {
+                 py::gil_scoped_release release;
+                 self.reset();
+             },
+             "Restarts the device out of download mode.")
+        .def("power_off", [](UnisocBsl& self) {
+            py::gil_scoped_release release;
+            self.power_off();
+        });
 
     module.def("parse_pac", &huaxin::protocols::spd::parse_pac,
                py::arg("data"), py::arg("verify_payload") = true,

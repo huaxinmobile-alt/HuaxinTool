@@ -6,7 +6,8 @@ import logging
 import sys
 import traceback
 
-from PyQt6.QtCore import QTimer
+from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtGui import QGuiApplication
 from PyQt6.QtWidgets import QApplication
 
 from huaxin import __version__
@@ -87,7 +88,27 @@ def _install_excepthook(service: BackendService) -> None:
     sys.excepthook = hook
 
 
+def _install_high_dpi_policy() -> None:
+    """Keeps fractional display scaling instead of rounding it away.
+
+    Qt's default is to round a scale factor like 125% or 150% to the nearest whole
+    number, which on a laptop at 125% turns a crisp interface into a slightly
+    blurry one - and on the machines this tool runs on, 125% is the common case.
+    PassThrough uses the scaling the display actually has.
+
+    MUST be called before the QApplication is constructed: the policy is read
+    when the application object is created, and setting it afterwards has no
+    effect at all. That ordering is the whole reason this is a function called
+    first rather than a line in the middle of `main()`.
+    """
+    policy = getattr(QGuiApplication, "setHighDpiScaleFactorRoundingPolicy", None)
+    if policy is None:  # pragma: no cover - Qt 5 has no such setting
+        return
+    policy(Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
+
+
 def main(argv: list[str] | None = None) -> int:
+    _install_high_dpi_policy()
     app = QApplication(argv if argv is not None else sys.argv)
     app.setApplicationName("Huaxin Tool")
     app.setApplicationDisplayName("Huaxin Tool")
