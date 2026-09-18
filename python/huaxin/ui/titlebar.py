@@ -285,14 +285,26 @@ class FramelessWindow(QMainWindow):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, False)
         self.setMouseTracking(True)
 
+        # The title bar goes in the MENU WIDGET slot, and that placement is the
+        # whole reason the window looks right. A QMainWindow lays out its own menu
+        # bar, then its toolbars, then the dock area, then the central widget - so
+        # a title bar put inside the central widget ends up below the menu bar and
+        # the toolbar, with the window's minimise/maximise/close buttons sitting in
+        # the middle of the window. That is what this window did, and it is what
+        # the first screenshot in the issue showed.
+        #
+        # The menu widget slot is the one strip that is always at the very top and
+        # always the full width, which is exactly what a title bar is. The cost is
+        # that Qt's native menu bar is replaced by it, so the menus are built as a
+        # QMenuBar widget inside the content instead - see MainWindow._build_menu.
+        self.titlebar = TitleBar(self, title=title, subtitle=subtitle)
+        self.setMenuWidget(self.titlebar)
+
         self._root = QWidget(self)
         self._root_layout = QVBoxLayout(self._root)
         self._root_layout.setContentsMargins(0, 0, 0, 0)
         self._root_layout.setSpacing(0)
         super().setCentralWidget(self._root)
-
-        self.titlebar = TitleBar(self._root, title=title, subtitle=subtitle)
-        self._root_layout.addWidget(self.titlebar)
 
         self._content = QWidget(self._root)
         self._root_layout.addWidget(self._content, 1)
@@ -312,10 +324,10 @@ class FramelessWindow(QMainWindow):
     def content(self) -> QWidget:
         """Where the window's own content goes.
 
-        Not `centralWidget()`: that is the root widget holding the title bar, so
-        returning it would let a caller put content behind the bar. Overriding
-        the Qt method with different semantics is deliberate and is why the
-        accessor is renamed rather than shadowing.
+        Not `centralWidget()`: that is the root widget, which QMainWindow sizes
+        and positions itself around the docks. Overriding the Qt method with
+        different semantics is deliberate and is why the accessor is renamed
+        rather than shadowing.
         """
         return self._content
 
@@ -341,17 +353,24 @@ class FramelessWindow(QMainWindow):
     def resizeEvent(self, event) -> None:  # noqa: N802 - Qt naming
         super().resizeEvent(event)
 
-        # The central widget is resized explicitly, which QMainWindow normally
-        # does for us. It does it in response to a *platform* resize event, and
+        # The layout is activated explicitly. QMainWindow normally does this on a
+        # resize, but it does it in response to a *platform* resize event, and
         # there are two situations where that never arrives: the offscreen
         # platform Qt's headless rendering uses, and any platform that hands the
-        # window a new size without a layout pass. The symptom is quiet and bad -
-        # the window is 1440 wide, the interface inside it is stuck at its
-        # startup width, and everything after the old right edge of the title bar
-        # (the theme picker, the window buttons) is simply not drawn. The
-        # screenshots in docs/ were rendered that way for several phases.
-        if self._root.size() != self.size():
-            self._root.resize(self.size())
+        # window a new size without a layout pass. The symptom is quiet - the
+        # window is 1440 wide and the interface inside it is stuck at its startup
+        # width, so everything past the old right edge of the title bar (the theme
+        # picker, the window buttons) is not drawn.
+        #
+        # It is deliberately NOT `self._root.resize(self.size())`, which is what
+        # this did first. That looks equivalent and is not: with dock widgets on
+        # the window, the central widget's correct size is the window MINUS the
+        # docks, and forcing it to the full window size makes the tab area extend
+        # underneath the log dock and the status bar - content that is simply not
+        # visible, in a window that otherwise looks fine.
+        layout = self.layout()
+        if layout is not None:
+            layout.activate()
 
         margin = _RESIZE_MARGIN
         width, height = self.width(), self.height()

@@ -266,6 +266,17 @@ class SettingsDialog(QDialog):
         self._scan_on_startup = QCheckBox("Scan for devices at startup", behaviour)
         form.addRow(self._scan_on_startup)
 
+        self._auto_scan = self._whole_box(
+            behaviour, "auto_scan_seconds",
+            "Rescan the USB bus on a timer, so a device that is plugged in appears "
+            "without anybody pressing anything.\n"
+            "Zero turns it off. The scan is skipped while an operation is running, "
+            "because reading a device's string descriptors mid-flash is at best "
+            "noise in the log.",
+            suffix=" s", zero_text="Never",
+        )
+        form.addRow("Scan every", self._auto_scan)
+
         layout.addWidget(behaviour)
 
         listing = QGroupBox("Device list", page)
@@ -764,6 +775,7 @@ class SettingsDialog(QDialog):
 
         self._confirm.setChecked(settings.confirm_destructive_operations)
         self._scan_on_startup.setChecked(settings.scan_on_startup)
+        self._auto_scan.setValue(settings.auto_scan_seconds)
         self._read_strings.setChecked(settings.read_usb_strings)
         self._show_hubs.setChecked(settings.show_root_hubs)
 
@@ -808,6 +820,7 @@ class SettingsDialog(QDialog):
         updated = Settings(**self._settings.to_dict())
         updated.confirm_destructive_operations = self._confirm.isChecked()
         updated.scan_on_startup = self._scan_on_startup.isChecked()
+        updated.auto_scan_seconds = self._auto_scan.value()
         updated.read_usb_strings = self._read_strings.isChecked()
         updated.show_root_hubs = self._show_hubs.isChecked()
 

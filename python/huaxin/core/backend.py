@@ -480,6 +480,16 @@ class BackendService(QObject):
         return self._libusb_version
 
     @property
+    def scan_in_flight(self) -> bool:
+        """True while a request_scan is queued or running.
+
+        Exposed so the periodic refresh can skip a scan it would only be refused:
+        `request_scan` already refuses a second one, but asking first keeps the
+        reason in the caller where it can be read.
+        """
+        return self._scan_in_flight
+
+    @property
     def is_busy(self) -> bool:
         return self._worker.pending > 0
 

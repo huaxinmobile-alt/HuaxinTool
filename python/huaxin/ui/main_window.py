@@ -12,12 +12,13 @@ from __future__ import annotations
 from functools import partial
 from pathlib import Path
 
-from PyQt6.QtCore import QSettings, QSize, Qt
+from PyQt6.QtCore import QSettings, QSize, Qt, QTimer
 from PyQt6.QtGui import QAction, QCloseEvent, QDragEnterEvent, QDropEvent, QKeySequence
 from PyQt6.QtWidgets import (
-    QDockWidget,
     QLabel,
+    QMenuBar,
     QMessageBox,
+    QSplitter,
     QToolBar,
     QVBoxLayout,
     QWidget,
@@ -67,13 +68,19 @@ _STATE_CHIP = {
 }
 
 _DEFAULT_SIZE = (1360, 860)
-_DEFAULT_DEVICE_DOCK_WIDTH = 420
-_DEFAULT_LOG_DOCK_HEIGHT = 220
+_DEFAULT_DEVICE_WIDTH = 420
+_DEFAULT_LOG_HEIGHT = 220
 
-#: The shortest the log dock may ever be dragged to. A log strip two lines tall is
-#: the first thing an operator complains about and the last thing they think to
+#: The shortest the log may ever be dragged to. A log strip two lines tall is the
+#: first thing an operator complains about and the last thing they think to
 #: resize, so it has a floor rather than only a default.
-_LOG_DOCK_MIN_HEIGHT = 260
+#:
+#: Taken from the design tokens rather than chosen here, and that matters: this is
+#: a hard floor, so it has to fit alongside the title bar, the menu bar, the
+#: toolbar and the status bar inside the *minimum* window height. At 260 - the
+#: number this started as - the floor and the tabs' own minimum could not both be
+#: met at 1024x640, and the log overflowed into the status bar.
+_LOG_MIN_HEIGHT = tokens.METRICS.console_min_height
 
 #: (key, panel class). The order is the tab order, and the class is built on
 #: first visit - see `_ensure_panel`. The tab's label and icon are read from the
@@ -165,10 +172,16 @@ class MainWindow(FramelessWindow):
         self.titlebar.add_widget(self._theme_picker)
         self.themes.on_change(self._on_theme_changed)
 
+        # Re-enumerates the USB bus on a timer, because a service tool is expected
+        # to notice a device being plugged in rather than waiting to be asked. The
+        # interval comes from the settings and 0 turns it off; it is started once
+        # the backend reports ready.
+        self._scan_timer = QTimer(self)
+        self._scan_timer.timeout.connect(safe_slot(self._on_auto_scan))
+
         self._build_toolbar()
         self._build_menu()
         self._build_central()
-        self._build_docks()
         self._build_status_bar()
         self._build_drop_hint()
         self._wire()
@@ -185,12 +198,15 @@ class MainWindow(FramelessWindow):
     # -- construction ------------------------------------------------------
 
     def _build_toolbar(self) -> None:
+        # Built but not added to the window here: `_build_central` puts it in the
+        # content layout, below the menu bar and the title bar. `addToolBar` would
+        # place it in QMainWindow's own toolbar area, which is above the central
+        # widget - above the tabs, but also above the title bar's content.
         toolbar = QToolBar("Main", self)
         toolbar.setObjectName("MainToolBar")
         toolbar.setMovable(False)
         toolbar.setIconSize(QSize(16, 16))
         toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
-        self.addToolBar(toolbar)
 
         self._action_scan = QAction("⟳  Scan Devices", self)
         self._action_scan.setShortcut(QKeySequence("F5"))
@@ -238,11 +254,16 @@ class MainWindow(FramelessWindow):
         self._toolbar = toolbar
 
     def _build_menu(self) -> None:
+        # A QMenuBar built as a widget rather than QMainWindow's own menu bar,
+        # because the menu bar slot is occupied by the title bar. It goes into the
+        # content layout, which is why `_build_central` adds it first.
+        #
         # The menus reference the same QAction objects as the toolbar, so
         # shortcuts, enablement and text stay in sync automatically - including
         # the shortcut text Qt prints beside each entry, which is why every
         # shortcut is documented here rather than in a help page nobody opens.
-        file_menu = self.menuBar().addMenu("&File")
+        self._menubar = QMenuBar(self)
+        file_menu = self._menubar.addMenu("&File")
         file_menu.addAction(self._action_scan)
         file_menu.addSeparator()
         file_menu.addAction(self._action_save_log)
@@ -263,7 +284,7 @@ class MainWindow(FramelessWindow):
         quit_action.triggered.connect(safe_slot(self.close))
         file_menu.addAction(quit_action)
 
-        self._view_menu = self.menuBar().addMenu("&View")
+        self._view_menu = self._menubar.addMenu("&View")
 
         # One entry per vendor tab, with the shortcut that jumps to it. Alt+1..5
         # is what makes the tab bar usable without a mouse, and it costs one
@@ -276,7 +297,7 @@ class MainWindow(FramelessWindow):
             action.triggered.connect(safe_slot(partial(self._on_show_tab, index)))
             self._view_menu.addAction(action)
 
-        help_menu = self.menuBar().addMenu("&Help")
+        help_menu = self._menubar.addMenu("&Help")
         driver_action = QAction("USB &driver help", self)
         driver_action.setStatusTip("Which driver each vendor's flash mode needs.")
         driver_action.triggered.connect(safe_slot(self._on_driver_help))
@@ -297,7 +318,7 @@ class MainWindow(FramelessWindow):
         help_menu.addAction(about_action)
 
     def _build_central(self) -> None:
-        """Builds the tab bar with placeholder tabs.
+        """Builds the tab bar, the device list and the log, in that stacking.
 
         The panels are *not* built here. Each one is a few hundred widgets and a
         handful of tables, and building all five before the window is shown costs
@@ -305,6 +326,26 @@ class MainWindow(FramelessWindow):
         at. A placeholder goes in instead and is swapped on the first visit - see
         `_ensure_panel`, which is also what makes the drop and the Alt+N shortcuts
         work on a tab that has never been opened.
+
+        THE LAYOUT IS SPLITTERS, NOT DOCKS, and that is a deliberate reversal. A
+        QDockWidget lives in QMainWindow's dock area, which wraps the *central
+        widget* - so anything inside the content (the menu bar, the toolbar) is
+        laid out beside the dock rather than above it, and the window reads as two
+        columns that do not line up. Splitters inside the content stack the way a
+        service tool stacks instead:
+
+            title bar
+            menu bar
+            toolbar
+            [ device list | vendor tabs ]
+            log console
+            status bar
+
+        The docks also had to be told not to float or close, because a panel
+        dragged out of the window and left floating over the tabs is a panel
+        somebody loses. Plain widgets do not float, so there is nothing to
+        disable - and the View menu entries that hide them work again, which they
+        could not while the docks were locked.
         """
         self._tabs = ui.StyledTabWidget(self)
 
@@ -320,13 +361,89 @@ class MainWindow(FramelessWindow):
 
         self._tabs.currentChanged.connect(safe_slot(self._on_tab_changed))
 
-        # Inside the frameless window's content area, below the title bar -
-        # `setCentralWidget` would put the tabs behind the custom chrome.
+        self._device_panel = DevicePanel(self)
+        self._console = LogConsole(self)
+
+        # The device list is fixed-width in practice and the tabs take the slack,
+        # so the stretch factors are set rather than left to the size hints - a
+        # table of device names would otherwise ask for more room than it needs
+        # and squeeze the panel the operator is working in.
+        upper = QSplitter(Qt.Orientation.Horizontal, self)
+        upper.setObjectName("BodySplitter")
+        upper.addWidget(self._device_panel)
+        upper.addWidget(self._tabs)
+        upper.setStretchFactor(0, 0)
+        upper.setStretchFactor(1, 1)
+        upper.setSizes([_DEFAULT_DEVICE_WIDTH, _DEFAULT_DEVICE_WIDTH + 600])
+        # Neither half may be collapsed to nothing by a stray drag: both are
+        # always wanted, and a collapsed device list looks like a broken window.
+        upper.setCollapsible(0, False)
+        upper.setCollapsible(1, False)
+
+        self._splitter = QSplitter(Qt.Orientation.Vertical, self)
+        self._splitter.setObjectName("BodySplitterVertical")
+        self._splitter.addWidget(upper)
+        self._splitter.addWidget(self._console)
+        self._splitter.setStretchFactor(0, 1)
+        self._splitter.setStretchFactor(1, 0)
+        self._splitter.setSizes([600, _DEFAULT_LOG_HEIGHT])
+        self._splitter.setCollapsible(0, False)
+        self._splitter.setCollapsible(1, False)
+        # A log strip two lines tall is the first thing an operator complains
+        # about and the last thing they think to resize, so it has a floor rather
+        # than only a default.
+        self._console.setMinimumHeight(_LOG_MIN_HEIGHT)
+
+        self._upper_splitter = upper
+
+        # The two panels can be hidden again: they are plain widgets in a
+        # splitter, so unlike the docks they replaced - which had to be locked
+        # against floating and closing, and whose toggles Qt then disabled - these
+        # entries do what they say.
+        for label, widget in (("&Devices panel", self._device_panel),
+                              ("&Log panel", self._console)):
+            action = QAction(label, self)
+            action.setCheckable(True)
+            action.setChecked(True)
+            action.setStatusTip(f"Show or hide the {label.strip('&').replace(' panel', '').lower()} panel")
+            action.toggled.connect(safe_slot(partial(self._show_panel, widget)))
+            # Inserted at the top rather than appended: the panel toggles are the
+            # general chrome, and the tab list below them is navigation. They are
+            # built here rather than in _build_menu because the panels they hide
+            # do not exist yet at that point.
+            first = self._view_menu.actions()
+            if first:
+                self._view_menu.insertAction(first[0], action)
+            else:
+                self._view_menu.addAction(action)
+
         content = QVBoxLayout()
-        content.setContentsMargins(8, 8, 8, 4)
+        content.setContentsMargins(0, 0, 0, 0)
         content.setSpacing(0)
-        content.addWidget(self._tabs)
+        content.addWidget(self._menubar)
+        content.addWidget(self._toolbar)
+        # Only the working area keeps the window's padding; the two strips above
+        # it run edge to edge, which is what makes them read as window chrome
+        # rather than as two more panels.
+        body = QWidget(self)
+        body_layout = QVBoxLayout(body)
+        body_layout.setContentsMargins(8, 8, 8, 4)
+        body_layout.setSpacing(0)
+        body_layout.addWidget(self._splitter)
+        content.addWidget(body, 1)
         self.set_content_layout(content)
+
+
+    def _show_panel(self, widget: QWidget, visible: bool) -> None:
+        """Shows or hides one of the two panels the View menu lists.
+
+        Hiding is done through the splitter sizes as well as the widget, because
+        a splitter that still reserves the space of a hidden child leaves a gap
+        with nothing in it - which looks more broken than the panel did.
+        """
+        widget.setVisible(visible)
+        if visible:
+            self._restore_panel_sizes()
 
     def _build_drop_hint(self) -> None:
         """The overlay shown while a file is dragged over the window.
@@ -340,50 +457,6 @@ class MainWindow(FramelessWindow):
         self._drop_hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._drop_hint.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
         self._drop_hint.setVisible(False)
-
-    def _build_docks(self) -> None:
-        """Builds the two docks, fixed in place.
-
-        The docks are deliberately not movable and not floatable. A panel that
-        can be torn off and left floating over the tabs is a panel somebody drags
-        away by accident and then cannot find again, and every tool in this market
-        keeps its device list and its log where they are. The cost is stated
-        rather than hidden: Qt *disables* a dock's View-menu toggle when the dock
-        cannot be closed, so those two menu entries are not added at all - a menu
-        item that looks clickable and does nothing is worse than no menu item.
-        **Reset Layout** is the way back if a dock ends up hidden.
-        """
-        self._device_panel = DevicePanel(self)
-        devices_dock = QDockWidget("Devices", self)
-        devices_dock.setObjectName("DevicesDock")
-        devices_dock.setWidget(self._device_panel)
-        devices_dock.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
-        )
-        self.addDockWidget(Qt.DockWidgetArea.LeftDockWidgetArea, devices_dock)
-
-        self._console = LogConsole(self)
-        log_dock = QDockWidget("Log", self)
-        log_dock.setObjectName("LogDock")
-        log_dock.setWidget(self._console)
-        log_dock.setAllowedAreas(
-            Qt.DockWidgetArea.BottomDockWidgetArea | Qt.DockWidgetArea.TopDockWidgetArea
-        )
-        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, log_dock)
-
-        # Both docks, once, after both exist - each is locked against dragging,
-        # floating and closing. The log also gets a floor on its height: a log
-        # strip two lines tall is the first thing an operator complains about and
-        # the last thing they think to resize.
-        for dock in (devices_dock, log_dock):
-            dock.setFeatures(QDockWidget.DockWidgetFeature.NoDockWidgetFeatures)
-            dock.setFloating(False)
-        log_dock.setMinimumHeight(_LOG_DOCK_MIN_HEIGHT)
-
-        self._devices_dock = devices_dock
-        self._log_dock = log_dock
-        self._view_menu.addSeparator()
-        self._view_menu.addAction(self._action_reset_layout)
 
     def _build_status_bar(self) -> None:
         bar = self.statusBar()
@@ -478,6 +551,35 @@ class MainWindow(FramelessWindow):
         self._tabs.setCurrentIndex(index)
 
     # -- slots -------------------------------------------------------------
+
+    def _on_auto_scan(self) -> None:
+        """The periodic refresh.
+
+        Skipped while anything is running: a scan opens devices to read their
+        string descriptors, and doing that in the middle of a flash is at best
+        noise in the log and at worst a failed transfer. Skipped too when a scan is
+        already in flight, so a slow bus cannot build a queue of them.
+        """
+        if self._service.state != "ready" or self._service.is_busy:
+            return
+        if self._service.scan_in_flight:
+            return
+        self._on_scan()
+
+    def _apply_auto_scan(self) -> None:
+        """Starts, stops or re-times the periodic scan from the settings.
+
+        Read by name rather than through `getattr(..., "auto_scan_seconds")`: the
+        defensive form hides the dependency from anything that finds a setting's
+        users by searching for it, which is exactly how this project checks that
+        no setting is merely decorative - and that check failed on this line while
+        the setting was in fact being honoured.
+        """
+        seconds = int(self.settings.auto_scan_seconds or 0)
+        if seconds <= 0:
+            self._scan_timer.stop()
+            return
+        self._scan_timer.start(seconds * 1000)
 
     def _on_scan(self) -> None:
         self._service.request_scan(
@@ -676,6 +778,13 @@ class MainWindow(FramelessWindow):
     def _on_state_changed(self, state: str) -> None:
         self._apply_chip_style(state)
         self._action_scan.setEnabled(state == "ready")
+        # Starts the unattended refresh, and stops it again if the backend goes
+        # away: a timer that keeps calling into a stopped backend fills the log
+        # with failures nobody asked for.
+        if state == "ready":
+            self._apply_auto_scan()
+        else:
+            self._scan_timer.stop()
         if state == "unavailable":
             self.statusBar().showMessage("Backend unavailable — build the native module and restart.", 0)
         elif state == "ready":
@@ -701,11 +810,12 @@ class MainWindow(FramelessWindow):
 
     def _on_reset_layout(self) -> None:
         self._settings.remove("window/geometry")
-        self._settings.remove("window/state")
-        self._devices_dock.setVisible(True)
-        self._log_dock.setVisible(True)
-        self.resizeDocks([self._devices_dock], [_DEFAULT_DEVICE_DOCK_WIDTH], Qt.Orientation.Horizontal)
-        self.resizeDocks([self._log_dock], [_DEFAULT_LOG_DOCK_HEIGHT], Qt.Orientation.Vertical)
+        self._settings.remove("window/splitter")
+        self._settings.remove("window/upper_splitter")
+        self._device_panel.setVisible(True)
+        self._console.setVisible(True)
+        self._upper_splitter.setSizes([_DEFAULT_DEVICE_WIDTH, 1000])
+        self._splitter.setSizes([600, _DEFAULT_LOG_HEIGHT])
         self.resize(*_DEFAULT_SIZE)
         self._apply_chip_style(self._service.state)
         self._operation.reset()
@@ -729,6 +839,7 @@ class MainWindow(FramelessWindow):
         # worker thread rather than by the UI reaching into the Logger directly.
         self._service.apply_settings(accepted)
         self._console.set_auto_scroll(accepted.auto_scroll_log)
+        self._apply_auto_scan()
         self._apply_interface_settings(accepted)
         if accepted.theme != self.themes.current:
             # The picker is the authority on the theme; the dialog can change it
@@ -962,15 +1073,24 @@ class MainWindow(FramelessWindow):
         geometry = self._settings.value("window/geometry")
         if geometry is not None:
             self.restoreGeometry(geometry)
-        state = self._settings.value("window/state")
-        if state is not None:
-            self.restoreState(state)
+        self._restore_panel_sizes()
+
+    def _restore_panel_sizes(self) -> None:
+        """Puts the two splitters back where they were, or at their defaults."""
+        horizontal = self._settings.value("window/upper_splitter")
+        if horizontal is not None:
+            self._upper_splitter.restoreState(horizontal)
         else:
-            self.resizeDocks([self._devices_dock], [_DEFAULT_DEVICE_DOCK_WIDTH], Qt.Orientation.Horizontal)
-            self.resizeDocks([self._log_dock], [_DEFAULT_LOG_DOCK_HEIGHT], Qt.Orientation.Vertical)
+            self._upper_splitter.setSizes([_DEFAULT_DEVICE_WIDTH, 1000])
+        vertical = self._settings.value("window/splitter")
+        if vertical is not None:
+            self._splitter.restoreState(vertical)
+        else:
+            self._splitter.setSizes([600, _DEFAULT_LOG_HEIGHT])
 
     def closeEvent(self, event: QCloseEvent) -> None:  # noqa: N802 - Qt naming
         self._settings.setValue("window/geometry", self.saveGeometry())
-        self._settings.setValue("window/state", self.saveState())
+        self._settings.setValue("window/upper_splitter", self._upper_splitter.saveState())
+        self._settings.setValue("window/splitter", self._splitter.saveState())
         self._settings.sync()
         super().closeEvent(event)

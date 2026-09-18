@@ -125,6 +125,9 @@ NUMBER_BOUNDS: dict[str, tuple[float, float]] = {
     "retry_total_budget_s": (0, 86_400),
     "log_max_bytes": (0, 1024 * 1024 * 1024),
     "speed_limit": (0, 1024 * 1024 * 1024),
+    #: Five minutes is a patience limit rather than a technical one: past
+    #: that the operator has stopped expecting the tool to notice.
+    "auto_scan_seconds": (0, 300),
 }
 
 #: Fields whose value is a whole number rather than a real one.
@@ -136,6 +139,7 @@ WHOLE_FIELDS = frozenset(
         "retry_total_budget_s",
         "log_max_bytes",
         "speed_limit",
+        "auto_scan_seconds",
     }
 )
 
@@ -205,6 +209,12 @@ class Settings:
     show_root_hubs: bool = False
     #: Ask for a scan as soon as the application starts.
     scan_on_startup: bool = True
+    #: Rescan the USB bus every this many seconds, 0 to never. A service tool is
+    #: expected to notice a device being plugged in without being asked, which is
+    #: what this is for: the refresh is cheap (a few milliseconds of enumeration)
+    #: and an operator who has just connected a phone should not have to press
+    #: anything. Arrivals and departures are reported once, not once per scan.
+    auto_scan_seconds: int = 5
     #: Bytes per second cap on flashing, 0 for none.
     speed_limit: int = 0
 

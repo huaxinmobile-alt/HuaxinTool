@@ -782,6 +782,56 @@ def test_main_window() -> None:
     # Minimum size is enforced, which is what stops the layout collapsing.
     window.resize(200, 200)
     _settle(3)
+    # --- the window stacks, and nothing overlaps ----------------------------
+    #
+    # This is a regression test for two layout bugs that both looked fine in the
+    # source. The title bar was inside the central widget, so QMainWindow put its
+    # own menu bar and toolbar ABOVE it and the window's minimise/maximise/close
+    # buttons ended up in the middle of the window. And the central widget was
+    # forced to the full window size, which made the tab area extend underneath
+    # the log dock and the status bar - content that is simply not visible.
+    from PyQt6.QtCore import QPoint, QRect
+
+    def in_window(widget) -> QRect:
+        return QRect(widget.mapTo(window, QPoint(0, 0)), widget.size())
+
+    strips = [
+        ("title bar", window.titlebar),
+        ("menu bar", window._menubar),
+        ("toolbar", window._toolbar),
+        ("device list", window._device_panel),
+        ("tabs", window._tabs),
+        ("log", window._console),
+        ("status bar", window.statusBar()),
+    ]
+    rects = [(name, in_window(widget)) for name, widget in strips]
+
+    climbed = [name for name, rect in rects if rect.top() >= 0 and rect.width() > 40]
+    check("every strip is laid out on screen", len(climbed) == len(strips), str(climbed))
+
+    heights = [rect.top() for _, rect in rects]
+    order = [name for name, _ in rects]
+    check("the strips stack in reading order without going backwards",
+          heights == sorted(heights),
+          " ".join(f"{n}@{r.top()}" for n, r in rects))
+
+    check("the title bar is the topmost strip", rects[0][1].top() == 0,
+          f"title bar at y={rects[0][1].top()}")
+    check("the title bar spans the window", rects[0][1].width() >= window.width() - 2,
+          f"{rects[0][1].width()} of {window.width()}")
+
+    overlaps = []
+    for i in range(len(rects)):
+        for j in range(i + 1, len(rects)):
+            inter = rects[i][1].intersected(rects[j][1])
+            if inter.width() > 2 and inter.height() > 2:
+                overlaps.append(f"{rects[i][0]}/{rects[j][0]}")
+    check("no two strips overlap", overlaps == [], ", ".join(overlaps))
+
+    check("the device list and the tabs sit side by side",
+          rects[3][1].top() == rects[4][1].top() and rects[3][1].right() <= rects[4][1].left() + 2,
+          f"list right {rects[3][1].right()}, tabs left {rects[4][1].left()}")
+
     check("the window refuses to shrink below its minimum",
           window.width() >= tokens.METRICS.window_min_width
           and window.height() >= tokens.METRICS.window_min_height,

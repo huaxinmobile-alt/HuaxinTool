@@ -61,5 +61,6 @@
   "theme": "midnight",
   "adb_path": "",
   "fastboot_path": "",
-  "animations": true
+  "animations": true,
+  "auto_scan_seconds": 5
 }
