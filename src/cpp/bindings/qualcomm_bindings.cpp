@@ -26,6 +26,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -107,11 +108,30 @@ std::function<bool()> make_cancel_callback(const py::object& callable) {
     };
 }
 
-/// Releases the GIL for the duration of a blocking device operation.
+/// Releases the GIL for the duration of a blocking device operation, and takes it
+/// back before the result leaves this function.
+///
+/// THE `disarm()` IS NOT OPTIONAL. `return callable();` builds the return value
+/// while the GIL is released, and for a type registered with pybind11 that
+/// touches the type object - the GIL assertion fires and the process aborts with
+/// no traceback. The symptom is not a Python exception: pressing a button in the
+/// GUI kills the tool.
+///
+/// So the call is made with the GIL released, and the GIL is taken back before
+/// the value is returned. The extra copy is the price, and it is a copy of a
+/// small reply struct.
 template <typename Callable>
-auto without_gil(Callable&& callable) {
+auto without_gil(Callable&& callable) -> decltype(callable()) {
+    using Result = decltype(callable());
     py::gil_scoped_release release;
-    return callable();
+    if constexpr (std::is_void_v<Result>) {
+        callable();
+        return;  // the release object restores the GIL as it unwinds
+    } else {
+        Result result = callable();
+        release.disarm();
+        return result;
+    }
 }
 
 /// A byte buffer handed to Python as `bytes`. Flashed images are tens of

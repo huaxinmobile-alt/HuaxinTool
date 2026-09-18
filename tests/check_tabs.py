@@ -380,6 +380,39 @@ def main() -> int:
     check("the previous states are restored afterwards",
           all(panel.actions.buttons()[k].isEnabled() == v for k, v in before.items()))
 
+    # --- a button that cannot work is not pressable --------------------------
+    #
+    # Four actions hand their work to the panel's "not available" stub: they say
+    # in their tooltip that this build cannot do them. They used to be enabled
+    # anyway, which is a control the operator presses twice and then stops
+    # trusting. A disabled button with the reason in its tooltip is the honest
+    # form.
+    print("\nbuttons this build cannot implement are disabled")
+    for panel in panels:
+        for spec in panel.actions._actions:
+            button = panel.actions.buttons()[spec.key]
+            if getattr(spec, "implemented", True):
+                continue
+            check(f"{panel.tab_name}: {spec.label} is disabled",
+                  not button.isEnabled(), "enabled but cannot work")
+            check(f"{panel.tab_name}: {spec.label} says why in its tooltip",
+                  "not available" in button.toolTip().lower()
+                  or "no " in button.toolTip().lower(),
+                  button.toolTip()[:60])
+
+    # The other half of the rule: an action this build *can* do must be pressable
+    # once a device is selected and nothing is running. Stated by setting that
+    # state rather than by assuming whatever the previous check left behind.
+    stuck = []
+    for panel in panels:
+        panel.actions.set_busy(False)
+        panel.actions.set_enabled_states(has_device=True, busy=False)
+        for spec in panel.actions._actions:
+            if getattr(spec, "implemented", True) and not panel.actions.buttons()[spec.key].isEnabled():
+                stuck.append(f"{panel.tab_name}/{spec.label}")
+    check("every implemented action is pressable with a device selected",
+          stuck == [], ", ".join(stuck))
+
     # --- render -----------------------------------------------------------
     out = ROOT / "docs" / "screenshots"
     out.mkdir(parents=True, exist_ok=True)

@@ -158,6 +158,14 @@ class ActionSpec:
     #: Overrides the panel's phase for this action alone, for a panel where some
     #: actions are implemented and others are not.
     phase: str = ""
+    #: False for an action whose button is shown but cannot work in this build.
+    #:
+    #: The button is then disabled rather than merely explaining itself in a
+    #: tooltip: a control that is pressable and does nothing is a control the
+    #: operator presses twice and then stops trusting. Disabled with the reason in
+    #: the tooltip is the honest form - it says what the action is, that this build
+    #: cannot do it, and why.
+    implemented: bool = True
     #: Icon name from huaxin.ui.icons. Optional: an action without one renders
     #: as text only, which is what a rarely used button should do.
     icon: str | None = None
@@ -1464,7 +1472,7 @@ class SpdPanel(VendorPanel):
                     "does not have. A guessed sequence against a phone is worse than no "
                     "sequence at all.",
                     icon="flash", requires_device=False, danger=True,
-                    handler=self._act_unavailable,
+                    handler=self._act_unavailable, implemented=False,
                 ),
                 ActionSpec(
                     "reset", "Reset Device",
@@ -1703,7 +1711,7 @@ class SamsungPanel(VendorPanel):
                 ActionSpec(
                     "read_pit", "Read PIT From Device",
                     "Not available: needs the Odin transport, which this build does not have.",
-                    icon="read", requires_device=False, handler=self._act_unavailable,
+                    icon="read", requires_device=False, handler=self._act_unavailable, implemented=False,
                 ),
                 ActionSpec(
                     "load_package", "Load Firmware Package\u2026",
@@ -1715,7 +1723,7 @@ class SamsungPanel(VendorPanel):
                     "flash_odin", "Flash (Odin)",
                     "Not available: writing needs the transport.",
                     icon="flash", requires_device=False, danger=True,
-                    handler=self._act_unavailable,
+                    handler=self._act_unavailable, implemented=False,
                 ),
                 ActionSpec(
                     "repartition", "Repartition (PIT)",
@@ -1723,7 +1731,7 @@ class SamsungPanel(VendorPanel):
                     "decides the partition table, and a wrong one leaves a device unable to "
                     "boot. It would also need the transport.",
                     icon="warning", requires_device=False, danger=True,
-                    handler=self._act_unavailable,
+                    handler=self._act_unavailable, implemented=False,
                 ),
             ),
             parent=parent,

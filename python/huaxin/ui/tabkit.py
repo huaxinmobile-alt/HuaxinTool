@@ -221,6 +221,11 @@ class ActionGrid(QWidget):
                 from functools import partial
 
                 button.clicked.connect(partial(on_action, spec))
+            if not getattr(spec, "implemented", True):
+                # Set once, here, as well as in set_enabled_states: a panel that
+                # has not been refreshed yet must not show a dead button as live.
+                button.setEnabled(False)
+                button.setToolTip(f"{spec.help}")
             self._buttons[spec.key] = button
             grid.addWidget(button, index // self._columns, index % self._columns)
 
@@ -276,10 +281,18 @@ class ActionGrid(QWidget):
         style.restyle(*self._buttons.values())
 
     def set_enabled_states(self, *, has_device: bool, busy: bool) -> None:
-        """Applies the two rules that decide what can be pressed."""
+        """Applies the three rules that decide what can be pressed.
+
+        Device requirement, whether the build implements the action at all, and
+        whether something is running. The middle one is not a state that changes:
+        an action this build cannot do stays disabled, and its tooltip is what
+        explains it.
+        """
         for spec in self._actions:
             button = self._buttons[spec.key]
             enabled = spec.requires_device is False or has_device
+            if not getattr(spec, "implemented", True):
+                enabled = False
             button.setEnabled(enabled and not busy)
 
     def requires_device(self, key: str) -> bool:

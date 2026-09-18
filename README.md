@@ -1038,6 +1038,35 @@ because a Cancel click often lands in the gap before the worker picks the job up
 
 ## Changelog
 
+### 0.8.4 — buttons that cannot work are not pressable
+
+**Four actions in this build hand their work to the panel's "not available"
+stub** - `Flash PAC Firmware`, `Read PIT From Device`, `Flash (Odin)` and
+`Repartition (PIT)`. They explained themselves in a tooltip and were *enabled*
+anyway, so pressing one did nothing visible. They are disabled now, with the
+reason still in the tooltip: a control that is pressable and does nothing is a
+control the operator presses twice and then stops trusting. `ActionSpec` gained
+`implemented=False` for them, and `check_tabs` asserts that every action the
+build cannot do stays disabled and that every action it can do becomes pressable
+once a device is selected.
+
+**`without_gil` now takes the GIL back before returning.** It was
+`return callable();`, which builds the return value while the GIL is released -
+and for a type registered with pybind11 that touches the type object. It is now
+`Result result = callable(); release.disarm(); return result;`, with a `void`
+branch for the calls that return nothing.
+
+**Still open, and the most serious thing in the project:** pressing
+**Qualcomm → Configure Device** aborts the process with
+`pybind11::handle::dec_ref() is being called while the GIL is either not held or
+invalid`. It reproduces every time in the real window and never in isolation, so
+it needs the worker thread to be running Python. Two hypotheses have been
+eliminated - the return-value construction above, and the call itself under
+`without_gil` in a plain two-thread test - and the boundary is now narrowed to
+methods that take a pybind11-wrapped struct by reference and run with the GIL
+released. This is written down here because it is a crash, not a defect, and the
+next session should start from it rather than from the beginning.
+
 ### 0.8.3 — Unisoc reads a device
 
 **The Research Download link works.** `protocols/spd/unisoc_bsl.{h,cpp}` is the
