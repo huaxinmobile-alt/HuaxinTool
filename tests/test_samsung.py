@@ -15,6 +15,7 @@ import struct
 import pathlib
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -226,8 +227,17 @@ def main() -> int:
 
     app = QApplication.instance() or QApplication([])  # noqa: F841
     app.setStyleSheet(build_stylesheet())
-    window = MainWindow(BackendService())
+    service = BackendService()
+    window = MainWindow(service)
     window.resize(1360, 860)
+    # The worker has to be running for a button press to *do* anything: without it
+    # a submitted job is queued and never executed, which would make the checks
+    # below pass by doing nothing at all.
+    service.start()
+    deadline = time.monotonic() + 15
+    while time.monotonic() < deadline and service.state not in ("ready", "unavailable"):
+        time.sleep(0.05)
+        app.processEvents()
     tabs = window.findChild(QTabWidget)
 
     samsung_index = next(i for i in range(tabs.count()) if tabs.tabText(i) == "Samsung")
@@ -286,6 +296,45 @@ def main() -> int:
           "primary source" in spd_buttons["Flash PAC Firmware"].toolTip()
           or "FDL1" in spd_buttons["Flash PAC Firmware"].toolTip(),
           spd_buttons["Flash PAC Firmware"].toolTip()[:80])
+    # --- every device button actually reaches its job ------------------------
+    #
+    # This is a regression test for a real bug: the handshake button submitted its
+    # job with an extra panel argument the function does not take, so pressing it
+    # raised TypeError. The error handling caught it and the tool stayed up, which
+    # is why the suite passed - nothing had ever pressed the button. What the
+    # buttons must do without a device attached is *report* that there is no
+    # device, in a sentence the operator can act on.
+    if spd_panel is not None:
+        console = window._console if hasattr(window, "_console") else None
+        for key, label in (("handshake", "Research Download Handshake"),
+                           ("read_info", "Read Device Info"),
+                           ("reset", "Reset Device"),
+                           ("power_off", "Power Off")):
+            button = spd_panel.actions.buttons().get(key)
+            if button is None:
+                check(f"the {label} button exists", False, "not found")
+                continue
+            if console is not None:
+                console.clear()
+            button.click()
+            deadline = time.monotonic() + 6
+            while time.monotonic() < deadline and window._service.is_busy:
+                time.sleep(0.02)
+                app.processEvents()
+            time.sleep(0.1)
+            app.processEvents()
+            text = console.text() if console is not None else ""
+            problem = next((l for l in text.splitlines()
+                            if "TypeError" in l or "AttributeError" in l), "")
+            check(f"{label}: reaches its job instead of raising a programming error",
+                  problem == "", problem[:90])
+            reported = next((l for l in text.splitlines() if "ERROR" in l), "")
+            check(f"{label}: says there is no device, rather than failing silently",
+                  "UnisocNotReadyError" in reported or "not found" in reported.lower()
+                  or "not attached" in reported.lower(),
+                  reported[:90] or "nothing logged")
+
+    service.shutdown()
     window.close()
 
     failed = [r for r in RESULTS if not r[0]]

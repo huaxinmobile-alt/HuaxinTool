@@ -1487,7 +1487,10 @@ class SpdPanel(VendorPanel):
         self._service.submit("spd.status", spd_verify_toolchain)
 
     def _act_handshake(self, _device: Device | None) -> None:
-        self._service.submit("spd.handshake", spd_connect, self)
+        # No panel argument: `bsl_connect` returns what it learned and the log
+        # already carried it, so there is nothing for the panel to display. The
+        # panels that pass `self` do so because their job calls back into them.
+        self._service.submit("spd.handshake", spd_connect)
 
     def _act_read_info(self, _device: Device | None) -> None:
         self._service.submit("spd.info", spd_read_device_info)
