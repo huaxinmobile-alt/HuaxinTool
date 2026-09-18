@@ -25,7 +25,6 @@ insurance, not a licence to touch it from the UI thread.
 
 from __future__ import annotations
 
-import math
 import sys
 import threading
 import time
@@ -360,7 +359,9 @@ def _human_bytes(count: float) -> str:
 
 def device_present() -> bool:
     """True when a 05c6:9008 device is on the bus. Safe to call on the UI thread:
-    it opens a libusb context and enumerates, nothing more."""
+    it opens a libusb context and enumerates, nothing more. Raises
+    UsbDiscoveryError if the USB subsystem cannot be initialized or enumerated;
+    False means enumeration succeeded but no matching phone was found."""
     return bool(_native().QualcommEdl.device_present())
 
 
@@ -617,8 +618,9 @@ def flash_partition(
 ) -> int:
     """Firehose <program>: write one image file to a sector range.
 
-    Returns the number of bytes written. `num_sectors` 0 means "as many as the
-    file needs, rounded up", which is what a rawprogram entry states anyway.
+    Returns the source image byte count (excluding zero padding). A nonzero
+    `num_sectors` is the maximum capacity; zero uses the rounded-up image size.
+    Only the final partial sector is padded, leaving unused capacity untouched.
     """
     session = _take()
     image = Path(image_path)
@@ -630,15 +632,18 @@ def flash_partition(
         raise ValueError(f"refusing to flash an empty image: {image}")
 
     size = int(sector_size) or session.sector_size()
-    needed = math.ceil(len(payload) / size)
-    sectors = int(num_sectors) or needed
-    if sectors < needed:
-        ctx.log(
-            f"{image.name} needs {needed} sectors of {size} bytes but the entry claims "
-            f"{sectors}; using the file's own size",
-            "warn",
+    if size <= 0 or int(num_sectors) < 0 or int(start_sector) < 0:
+        raise ValueError("sector size must be positive and the sector range non-negative")
+    needed = (len(payload) + size - 1) // size
+    if num_sectors and needed > int(num_sectors):
+        raise ValueError(
+            f"{image.name} needs {needed} sectors but the range allows only "
+            f"{num_sectors}; refusing to write past the partition. Nothing was written."
         )
-        sectors = needed
+    # The supplied range is a capacity, not a request to overwrite its unused tail.
+    sectors = needed
+    image_bytes = len(payload)
+    payload += b"\0" * (sectors * size - image_bytes)
 
     request = session.native.ProgramRequest()
     request.sector_size_in_bytes = size
@@ -662,7 +667,7 @@ def flash_partition(
         session.edl.set_progress_callback(None)
 
     ctx.log(f"{label or image.name}: {_human_bytes(len(payload))} written to {where}", "ok")
-    return len(payload)
+    return image_bytes
 
 
 def read_partition(

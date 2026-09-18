@@ -1,5 +1,8 @@
 #include "protocols/qualcomm/firehose.h"
 
+#include <algorithm>
+#include <chrono>
+#include <cstring>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
@@ -244,6 +247,51 @@ std::vector<std::string> extract_documents(std::string& pending) {
         pending.erase(0, length);
     }
     return documents;
+}
+
+std::string FirehoseReader::response(IByteTransport& transport, unsigned int timeout_ms) {
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
+    std::string result;
+    for (;;) {
+        const auto end = m_pending.find("</data>");
+        if (end != std::string::npos) {
+            const std::string document = m_pending.substr(0, end + 7);
+            m_pending.erase(0, end + 7);
+            result += document;
+            const auto parsed = parse_firehose_response(document);
+            if (parsed.status != FirehoseStatus::Log) {
+                return result;
+            }
+        } else {
+            const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - std::chrono::steady_clock::now()).count();
+            if (left <= 0) {
+                throw ProtocolError("timed out waiting for a Firehose response");
+            }
+            std::uint8_t buffer[4096];
+            const auto count = transport.read_some(buffer, sizeof(buffer),
+                                                   static_cast<unsigned int>(left));
+            m_pending.append(reinterpret_cast<const char*>(buffer), count);
+        }
+        if (result.size() + m_pending.size() > 1024 * 1024) {
+            throw ProtocolError("Firehose response exceeds the 1 MiB limit");
+        }
+        if (std::chrono::steady_clock::now() >= deadline) {
+            throw ProtocolError("timed out waiting for a Firehose response");
+        }
+    }
+}
+
+void FirehoseReader::read_exact(IByteTransport& transport, std::uint8_t* data,
+                                std::size_t size, unsigned int timeout_ms) {
+    const auto buffered = std::min(size, m_pending.size());
+    if (buffered) {
+        std::memcpy(data, m_pending.data(), buffered);
+        m_pending.erase(0, buffered);
+    }
+    if (buffered < size) {
+        transport.read_exact(data + buffered, size - buffered, timeout_ms);
+    }
 }
 
 // --- response parsing --------------------------------------------------------

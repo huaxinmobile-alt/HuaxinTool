@@ -22,6 +22,7 @@ import struct
 import sys
 import tempfile
 from pathlib import Path
+from unittest.mock import patch as mock_patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -250,26 +251,45 @@ def main() -> int:
     else:
         check("non-XML raises ProtocolError", False)
 
-    print("\n3. no EDL device attached (the common case here)")
-    check("device_present() reports False", qualcomm.device_present() is False)
+    print("\n3. deterministic USB discovery failure paths")
+    # Unit tests must not enumerate or send Sahara commands to a real phone.
+    with mock_patch.object(huaxin_core.QualcommEdl, "device_present", return_value=False):
+        check("device_present() reports False", qualcomm.device_present() is False)
 
-    ctx = FakeContext()
-    qualcomm.verify_toolchain(ctx)
-    warnings = ctx.lines("warn")
-    check("the toolchain check warns rather than failing",
-          any("05c6:9008" in message for message in warnings), str(warnings[:1]))
-    check("it explains how to reach EDL mode",
-          any("reboot edl" in message for message in warnings))
+        ctx = FakeContext()
+        qualcomm.verify_toolchain(ctx)
+        warnings = ctx.lines("warn")
+        check("the toolchain check warns rather than failing",
+              any("05c6:9008" in message for message in warnings), str(warnings[:1]))
+        check("it explains how to reach EDL mode",
+              any("reboot edl" in message for message in warnings))
 
-    ctx = FakeContext()
-    try:
-        qualcomm.read_device_info(ctx)
-    except huaxin_core.ProtocolError as exc:
-        message = str(exc)
-        check("reading identity without a device raises ProtocolError", True, message.splitlines()[0])
-        check("the error says which USB ID was looked for", "05c6:9008" in message or "9008" in message)
-    else:
-        check("reading identity without a device raises ProtocolError", False)
+    with mock_patch.object(huaxin_core.QualcommEdl, "read_device_info",
+                      side_effect=huaxin_core.ProtocolError("no device with USB ID 05c6:9008")):
+        ctx = FakeContext()
+        try:
+            qualcomm.read_device_info(ctx)
+        except huaxin_core.ProtocolError as exc:
+            message = str(exc)
+            check("reading identity without a device raises ProtocolError", True, message.splitlines()[0])
+            check("the error says which USB ID was looked for", "05c6:9008" in message or "9008" in message)
+        else:
+            check("reading identity without a device raises ProtocolError", False)
+
+    check("USB discovery errors remain catchable as protocol errors",
+          issubclass(huaxin_core.UsbDiscoveryError, huaxin_core.ProtocolError))
+    for stage in ("libusb_init", "libusb_get_device_list"):
+        ctx = FakeContext()
+        failure = huaxin_core.UsbDiscoveryError(stage + " failed: presence unknown")
+        with mock_patch.object(huaxin_core.QualcommEdl, "device_present", side_effect=failure):
+            try:
+                qualcomm.verify_toolchain(ctx)
+            except huaxin_core.UsbDiscoveryError as exc:
+                check(stage + " failure is propagated", str(exc) == str(failure))
+            else:
+                check(stage + " failure is propagated", False)
+        check(stage + " failure does not claim the phone is absent",
+              not any("no device" in message for message in ctx.lines("warn")))
 
     print("\n4. argument validation happens before any USB access")
     ctx = FakeContext()

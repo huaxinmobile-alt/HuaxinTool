@@ -93,6 +93,12 @@ if(HUAXIN_BUILD_TESTS)
     # testable on its own. The protocol sources now consult the timeout and
     # speed-cap overrides in core/, which is why those two appear in suites that
     # otherwise have nothing to do with the error system.
+    add_executable(huaxin_usb_discovery_tests
+        "${CMAKE_SOURCE_DIR}/tests/cpp/test_usb_discovery.cpp")
+    target_include_directories(huaxin_usb_discovery_tests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    target_link_libraries(huaxin_usb_discovery_tests PRIVATE huaxin::libusb)
+    add_test(NAME usb-discovery COMMAND huaxin_usb_discovery_tests)
+
     add_executable(huaxin_protocol_tests
         "${CMAKE_SOURCE_DIR}/tests/cpp/test_qualcomm.cpp"
         protocols/qualcomm/firehose.cpp
@@ -149,9 +155,11 @@ if(HUAXIN_BUILD_TESTS)
         set_target_properties(${_test_target} PROPERTIES FOLDER "tests")
     endforeach()
 
-    enable_testing()
     add_test(NAME qualcomm-protocols COMMAND huaxin_protocol_tests)
     add_test(NAME mediatek-protocols COMMAND huaxin_mediatek_tests)
     add_test(NAME samsung-protocols COMMAND huaxin_samsung_tests)
+    add_test(NAME spd-protocols COMMAND huaxin_spd_tests)
+    add_test(NAME qualcomm-write-safety
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tests/test_qualcomm_write_safety.py")
     add_test(NAME core-errors-and-logging COMMAND huaxin_core_tests)
 endif()

@@ -86,7 +86,8 @@ public:
 
     /// Finds a matching device and opens it.
     /// Throws ProtocolError with driver guidance on failure.
-    void open(const Options& options = {});
+    void open();
+    void open(const Options& options);
 
     void close() noexcept;
     bool is_open() const noexcept { return m_handle != nullptr; }

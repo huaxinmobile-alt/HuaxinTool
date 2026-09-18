@@ -11,6 +11,7 @@
 //  retry-loop tests only need to know *that* it waited, not how long.
 // =============================================================================
 
+#include <cmath>
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>

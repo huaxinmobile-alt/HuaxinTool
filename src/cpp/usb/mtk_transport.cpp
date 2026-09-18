@@ -119,6 +119,10 @@ std::vector<std::string> MtkTransport::devices_present() {
     return found;
 }
 
+void MtkTransport::open() {
+    open(Options{});
+}
+
 void MtkTransport::open(const Options& options) {
     if (m_handle != nullptr) {
         return;

@@ -289,13 +289,13 @@ void test_checksums() {
     // every frame, which is exactly why the check value is pinned here.
     check("CRC-16 with init 0 matches its published check value",
           crc16_ccitt(data) == 0x31C3,
-          [&] { char b[24]; std::snprintf(b, sizeof(b), "0x%04X, want 0x31C3", crc16_ccitt(data)); return b; }());
+          [&] { char b[24]; std::snprintf(b, sizeof(b), "0x%04X, want 0x31C3", crc16_ccitt(data)); return std::string(b); }());
     check("CRC-16/ARC matches its published check value",
           crc16_arc(data) == 0xBB3D,
-          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%04X", crc16_arc(data)); return b; }());
+          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%04X", crc16_arc(data)); return std::string(b); }());
     check("CRC-32/IEEE matches its published check value",
           crc32_ieee(data) == 0xCBF43926u,
-          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%08X", crc32_ieee(data)); return b; }());
+          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%08X", crc32_ieee(data)); return std::string(b); }());
 
     // The two CRC-16s are different algorithms that share a name; a build that
     // used one where the other belongs would fail against every device.
@@ -315,11 +315,11 @@ void test_checksums() {
         static_cast<std::uint16_t>((folded >> 8) | ((folded & 0xFF) << 8));
     check("the Spreadtrum sum agrees with the other spelling of itself",
           sprd_sum(pair) == expected_swapped,
-          [&] { char b[32]; std::snprintf(b, sizeof(b), "0x%04X vs 0x%04X", sprd_sum(pair), expected_swapped); return b; }());
+          [&] { char b[32]; std::snprintf(b, sizeof(b), "0x%04X vs 0x%04X", sprd_sum(pair), expected_swapped); return std::string(b); }());
 
     check("an empty buffer has a zero CRC", crc16_ccitt({}) == 0 && crc16_arc({}) == 0);
     check("the sum of nothing is the complement of zero",
-          sprd_sum({}) == 0xFFFF, [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%04X", sprd_sum({})); return b; }());
+          sprd_sum({}) == 0xFFFF, [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%04X", sprd_sum({})); return std::string(b); }());
     check("sum32 adds the bytes", sum32(pair) == 10, std::to_string(sum32(pair)));
 
     // Resuming has to give the same answer as doing it in one go, or a large
@@ -352,7 +352,7 @@ void test_pac_parsing() {
     const PacFile pac = parse_pac(data);
 
     check("the magic is recognised", pac.header.magic == kPacMagic,
-          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%08X", pac.header.magic); return b; }());
+          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%08X", pac.header.magic); return std::string(b); }());
     check("the version string is read", pac.header.version_string == "BP_R1.0.0",
           pac.header.version_string);
     check("the product name is read", pac.header.product_name == "TEST_PRODUCT",
@@ -372,7 +372,7 @@ void test_pac_parsing() {
     check("the file id is read", fdl1.file_id == "HOST_FDL", fdl1.file_id);
     check("the file name is read", fdl1.file_name == "fdl1-sign.bin", fdl1.file_name);
     check("the load address is read", fdl1.address == 0x5500,
-          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%llx", (unsigned long long)fdl1.address); return b; }());
+          [&] { char b[16]; std::snprintf(b, sizeof(b), "0x%llx", (unsigned long long)fdl1.address); return std::string(b); }());
     check("the payload size is read", fdl1.size == 64, std::to_string(fdl1.size));
     check("the payload offset points at the payload", fdl1.data_offset == kPacHeaderSize + 4 * kPacEntrySize,
           std::to_string(fdl1.data_offset));

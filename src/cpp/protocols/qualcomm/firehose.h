@@ -32,6 +32,17 @@
 
 namespace huaxin::protocols::qualcomm {
 
+/// Owns unread USB bytes across XML responses and raw read payloads.
+class FirehoseReader {
+public:
+    std::string response(IByteTransport& transport, unsigned int timeout_ms);
+    void read_exact(IByteTransport& transport, std::uint8_t* data,
+                    std::size_t size, unsigned int timeout_ms);
+    void clear() { m_pending.clear(); }
+private:
+    std::string m_pending;
+};
+
 // --- storage ----------------------------------------------------------------
 // The storage *types* are from qdl's `enum qdl_storage_type`. The exact strings
 // the programmer expects in <configure MemoryName="..."/> could NOT be verified
